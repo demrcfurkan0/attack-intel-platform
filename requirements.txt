@@ -4,3 +4,8 @@ pydantic
 joblib
 numpy
 pandas
+httpx
+time
+asyncio
+enum
+typing
