@@ -1,5 +1,4 @@
-# database.py
-
+import asyncio
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure # OperationFailure eklendi
 from datetime import datetime, timezone
