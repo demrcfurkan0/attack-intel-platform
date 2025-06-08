@@ -5,7 +5,8 @@ joblib
 numpy
 pandas
 httpx
-time
-asyncio
-enum
 typing
+pymongo
+dotenv
+xgboost
+scikit-learn
