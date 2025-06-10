@@ -70,7 +70,7 @@ async def handle_simulation_and_log(
         except Exception as e:
             end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()
-            print(f"❌ {sim_type.upper()} simülasyonu ({simulation_run_id}) sırasında hata: {e}")
+            print(f" {sim_type.upper()} simülasyonu ({simulation_run_id}) sırasında hata: {e}")
             print(traceback.format_exc())
             log_data_error = {
                 "simulation_id": simulation_run_id,
