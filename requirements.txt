@@ -10,3 +10,5 @@ pymongo
 dotenv
 xgboost
 scikit-learn
+websockets
+python-dotenv
