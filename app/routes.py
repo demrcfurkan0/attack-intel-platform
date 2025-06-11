@@ -101,60 +101,114 @@ async def get_attack_trends():
 @router.get("/stats/detection_metrics", tags=["Statistics"])
 async def get_detection_metrics():
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
+    if db_conn is None:
+        raise HTTPException(status_code=503, detail="DB connection failed")
+    
     def db_task():
         pipeline = [{"$group": {"_id": "$is_attack", "count": {"$sum": 1}}}]
         results = list(db_conn.predictions_log.aggregate(pipeline))
         metrics = {"detected_attacks": 0, "benign_traffic": 0}
         for res in results:
-            if res.get('_id'): metrics["detected_attacks"] = res['count']
-            else: metrics["benign_traffic"] = res['count']
+            if res.get('_id'):
+                metrics["detected_attacks"] = res['count']
+            else:
+                metrics["benign_traffic"] = res['count']
         return metrics
+    
     return await run_in_threadpool(db_task)
 
-# --- Kullanıcı Yönetimi (TÜM KONTROLLER DÜZELTİLDİ) ---
-@router.post("/users", response_model=UserInDB, status_code=201, tags=["Users"])
-async def create_user(user: UserCreate):
-    db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
-    def db_task():
-        if db_conn.users.find_one({"$or": [{"username": user.username}, {"email": user.email}]}):
-            return {"error": "Username or email already exists."}
-        result = db_conn.users.insert_one(user.dict())
-        return db_conn.users.find_one({"_id": result.inserted_id})
-    new_user = await run_in_threadpool(db_task)
-    if not new_user: raise HTTPException(500, "Failed to create user.")
-    if "error" in new_user: raise HTTPException(409, detail=new_user["error"])
-    return new_user
+
+def serialize_mongo_doc(doc):
+    if not doc: return None
+    if '_id' in doc:
+        doc['id'] = str(doc['_id'])
+        del doc['_id']
+    for key, value in doc.items():
+        if isinstance(value, datetime):
+            doc[key] = value.isoformat()
+    return doc
+
+# --- KULLANICI YÖNETİMİ (NİHAİ, EN SAĞLAM VERSİYON) ---
 
 @router.get("/users", response_model=List[UserInDB], tags=["Users"])
 async def get_users():
+    """Tüm kullanıcıları listeler."""
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
-    def db_task(): return list(db_conn.users.find())
+    if db_conn is None: raise HTTPException(503, "Database connection failed")
+    
+    def db_task():
+        # Veritabanından gelen her dokümanı manuel olarak serileştir
+        return [serialize_mongo_doc(user) for user in db_conn.users.find()]
+    
     return await run_in_threadpool(db_task)
+
+@router.post("/users", response_model=UserInDB, status_code=201, tags=["Users"])
+async def create_user(user: UserCreate):
+    """Yeni bir kullanıcı oluşturur."""
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "Database connection failed")
+
+    def db_task():
+        if db_conn.users.find_one({"username": user.username}):
+            return {"error": "Username already exists"}
+        if db_conn.users.find_one({"email": user.email}):
+            return {"error": "Email already exists"}
+        
+        # Pydantic modelini dict'e çevir ve DB'ye ekle
+        user_dict = user.dict()
+        result = db_conn.users.insert_one(user_dict)
+        
+        # Eklenen kullanıcıyı bul ve döndür
+        return db_conn.users.find_one({"_id": result.inserted_id})
+
+    new_user_doc = await run_in_threadpool(db_task)
+
+    if not new_user_doc: raise HTTPException(500, "Failed to create user")
+    if "error" in new_user_doc: raise HTTPException(409, detail=new_user_doc["error"])
+    
+    # Dönen sonucu da manuel olarak serileştir ve döndür
+    return serialize_mongo_doc(new_user_doc)
 
 @router.delete("/users/{user_id}", status_code=204, tags=["Users"])
 async def delete_user(user_id: str):
+    """Belirtilen ID'ye sahip kullanıcıyı siler."""
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
-    try: obj_id = ObjectId(user_id)
-    except: raise HTTPException(400, "Invalid ID format")
-    def db_task(): return db_conn.users.delete_one({"_id": obj_id}).deleted_count
-    if await run_in_threadpool(db_task) == 0: raise HTTPException(404, "User not found")
+    if db_conn is None: raise HTTPException(503, "Database connection failed")
+    try:
+        obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(400, "Invalid User ID format")
+
+    def db_task():
+        return db_conn.users.delete_one({"_id": obj_id}).deleted_count
+
+    deleted_count = await run_in_threadpool(db_task)
+    if deleted_count == 0:
+        raise HTTPException(404, "User not found")
+    return
 
 @router.patch("/users/{user_id}", response_model=UserInDB, tags=["Users"])
 async def update_user(user_id: str, payload: UserUpdate):
+    """Kullanıcının durumunu veya rolünü günceller."""
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
-    try: obj_id = ObjectId(user_id)
-    except: raise HTTPException(400, "Invalid ID format")
-    update_data = payload.dict(exclude_unset=True)
-    if not update_data: raise HTTPException(400, "No update data provided")
+    if db_conn is None: raise HTTPException(503, "Database connection failed")
+    try:
+        obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(400, "Invalid User ID format")
+
     def db_task():
-        res = db_conn.users.update_one({"_id": obj_id}, {"$set": update_data})
-        if res.matched_count == 0: return None
+        update_data = payload.dict(exclude_unset=True)
+        if not update_data: return "NoData"
+        
+        result = db_conn.users.update_one({"_id": obj_id}, {"$set": update_data})
+        if result.matched_count == 0: return None
+        
         return db_conn.users.find_one({"_id": obj_id})
-    user = await run_in_threadpool(db_task)
-    if not user: raise HTTPException(404, "User not found")
-    return user
+
+    updated_user_doc = await run_in_threadpool(db_task)
+
+    if updated_user_doc == "NoData": raise HTTPException(400, "No update data provided")
+    if updated_user_doc is None: raise HTTPException(404, "User not found")
+        
+    return serialize_mongo_doc(updated_user_doc)

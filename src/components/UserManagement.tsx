@@ -25,7 +25,22 @@ const UserManagement = () => {
     setIsLoading(true);
     try {
       const response = await getUsers();
-      setUsers(response.data || []);
+      const rawUsers: any[] = response.data || []; 
+      
+      // Gelen veriyi, 'id' alanı garanti olan bir formata dönüştür
+      const processedUsers: User[] = rawUsers.map(rawUser => {
+        const userId = rawUser.id || (rawUser._id ? String(rawUser._id) : '');
+        return {
+          id: userId,
+          username: rawUser.username,
+          email: rawUser.email,
+          role: rawUser.role,
+          status: rawUser.status,
+        };
+      }).filter(user => user.id); // ID'si olmayanları filtrele
+
+      setUsers(processedUsers);
+      
     } catch (error) {
       toast({ variant: "destructive", title: "Failed to load users." });
       setUsers([]);
@@ -102,18 +117,24 @@ const UserManagement = () => {
             <Table>
               <TableHeader><TableRow><TableHead>Username</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
-                {users?.map((user) => (
+                {users?.length > 0 ? users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.username}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>{user.role}</TableCell>
                     <TableCell><Badge variant={user.status === 'active' ? 'default' : 'secondary'}>{user.status}</Badge></TableCell>
                     <TableCell className="text-right space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => handleToggleStatus(user.id, user.status)}>{user.status === 'active' ? 'Deactivate' : 'Activate'}</Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleDeleteUser(user.id, user.username)}>Delete</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleToggleStatus(user.id, user.status)}>
+                        {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDeleteUser(user.id, user.username)}>
+                        Delete
+                      </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                )) : (
+                  <TableRow><TableCell colSpan={5} className="text-center">No users found.</TableCell></TableRow>
+                )}
               </TableBody>
             </Table>
           }
