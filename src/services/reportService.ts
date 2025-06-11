@@ -1,5 +1,7 @@
+// src/services/reportService.ts
+
 import apiClient from '../lib/apiClient';
-import { PaginatedResponse, SimulationLog } from '../types/apiTypes';
+import { PaginatedSimulationsResponse, PaginatedPredictionsResponse } from '../types/apiTypes';
 
 interface GetSimulationLogsParams {
   limit?: number;
@@ -8,5 +10,16 @@ interface GetSimulationLogsParams {
 }
 
 export const getSimulationLogs = (params: GetSimulationLogsParams = {}) => {
-  return apiClient.get<PaginatedResponse<SimulationLog>>('/api/reports/simulations', { params });
+  return apiClient.get<PaginatedSimulationsResponse>('/api/reports/simulations', { params });
+};
+
+
+interface GetPredictionLogsParams {
+  limit?: number;
+  skip?: number;
+}
+
+// --- YENİ FONKSİYON ---
+export const getPredictionLogs = (params: GetPredictionLogsParams = {}) => {
+  return apiClient.get<PaginatedPredictionsResponse>('/api/reports/predictions', { params });
 };

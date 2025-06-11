@@ -1,3 +1,5 @@
+// src/components/AttackSimulationPanel.tsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +14,11 @@ import { Progress } from '@/components/ui/progress';
 // Servis ve Tip importları
 import { startDdosSimulation, startBruteForceSimulation, startSqliSimulation } from '../services/simulationService';
 import { getSimulationLogs } from '../services/reportService';
-import { DDoSParams, BruteForceParams, SQLInjectionParams, SimulationLog } from '../types/apiTypes';
+// --- BU TİPLER ARTIK KULLANILACAK ---
+import { DDoSRequestPayload, BruteForceRequestPayload, SQLInjectionRequestPayload, SimulationLog } from '../types/apiTypes';
+
+// ... (Geri kalan tüm kod, bir önceki cevabımdaki gibi)...
+// handleStartSimulation fonksiyonu içinde 'as DDoSRequestPayload' gibi atamalar olacak.
 
 const AttackSimulationPanel = () => {
     const [attackType, setAttackType] = useState<'ddos' | 'brute_force' | 'sql_injection' | ''>('');

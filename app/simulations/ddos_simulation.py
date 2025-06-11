@@ -7,6 +7,7 @@ import asyncio
 import random
 import time
 import os
+from app.core import state
 
 # --- YENİ BÖLÜM: AI MODELİNİ BESLEMEK İÇİN ---
 
@@ -20,45 +21,30 @@ def generate_fake_ddos_features():
     """
     DDoS saldırısını taklit eden ve modelin beklediği 78 özellik için
     anlamlı ama sahte veriler üreten bir yardımcı fonksiyon.
-    Değerler, DDoS trafiğinin tipik özelliklerine göre ayarlanmalıdır.
     """
-    # Bu özellik adları ve sıraları, 'feature_columns.json' dosyanızdaki ile eşleşmelidir.
-    # Örnek olarak birkaç önemli özellik:
-    features = {
-        'Flow Duration': random.uniform(1_000_000, 50_000_000),  # Uzun süren akışlar
-        'Total Fwd Packets': random.uniform(5, 50),
-        'Total Backward Packets': random.uniform(5, 50),
-        'Fwd Packet Length Max': random.uniform(0, 500), # Genellikle küçük paketler
-        'Fwd Packet Length Min': random.uniform(0, 10),
-        'Fwd Packet Length Mean': random.uniform(5, 100),
-        'Flow IAT Mean': random.uniform(100, 10000), # Paketler arası süre düşük
-        'Flow IAT Max': random.uniform(50000, 500000),
-        'Min Packet Length': random.uniform(0, 10),
-        'Max Packet Length': random.uniform(0, 500),
-        'Packet Length Mean': random.uniform(5, 100),
-        'FIN Flag Count': 0, # Genellikle FIN bayrağı olmaz
-        'SYN Flag Count': 1, # SYN bayrağı olur
-        'PSH Flag Count': random.randint(0, 1),
-        'ACK Flag Count': random.randint(0, 1),
-        'URG Flag Count': 0,
-        'Down/Up Ratio': random.uniform(0.5, 1.5),
-        'Average Packet Size': random.uniform(5, 100),
-        'Avg Fwd Segment Size': random.uniform(5, 100),
-        'Init_Win_bytes_forward': random.randint(8192, 65535),
-        'Init_Win_bytes_backward': random.randint(200, 65535),
-        'Active Mean': random.uniform(100, 1000),
-        'Idle Mean': random.uniform(1_000_000, 10_000_000),
-    }
+    # Önce tüm özellikleri 0.0 ile başlat
+    if not state.feature_columns:
+        # Eğer özellik listesi yüklenemediyse boş bir dict döndür, bu bir hata durumudur.
+        print("⚠️ Feature columns not loaded in state. Cannot generate fake features.")
+        return {}
 
-    # Modelin beklediği 78 özelliği tamamlamak için geri kalanları rastgele doldur
-    # Önemli: Gerçek bir sistemde, tüm özellikler anlamlı olmalıdır.
-    # Bu kısım sadece bir yer tutucudur.
-    current_feature_count = len(features)
-    for i in range(current_feature_count, 78):
-        # Var olmayan özellik adları için genel bir adlandırma kullanalım
-        # VEYA feature_columns.json dosyasından tam listeyi alıp burada kullanmak en doğrusudur.
-        # Şimdilik yer tutucu olarak ekliyoruz.
-        features[f'placeholder_feature_{i}'] = random.random()
+    # state'den gelen tam özellik listesini kullanarak bir sözlük oluştur
+    features = {key: 0.0 for key in state.feature_columns}
+    
+    # Şimdi sadece bildiğimiz ve önemli olan özellikleri anormal değerlerle üzerine yazalım
+    # Eğer bir özellik adı yanlış yazılmışsa, bu yapı sayesinde hata vermez, sadece üzerine yazılmaz.
+    features.update({
+        'Flow Duration': random.uniform(50_000, 200_000),
+        'Total Fwd Packets': random.uniform(2, 6),
+        'Total Backward Packets': random.uniform(0, 4),
+        'Fwd Packet Length Max': random.uniform(0, 100),
+        'Flow IAT Mean': random.uniform(10_000, 80_000),
+        'Flow IAT Min': random.uniform(1, 100),
+        'Packet Length Mean': random.uniform(0, 50),
+        'Average Packet Size': random.uniform(0, 60),
+        'Init_Win_bytes_forward': -1.0,
+        'Init_Win_bytes_backward': -1.0
+    })
 
     return features
 
