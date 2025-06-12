@@ -1,6 +1,6 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -9,23 +9,36 @@ const apiClient = axios.create({
   },
 });
 
+// --- YENİ INTERCEPTOR ---
+// Bu fonksiyon, her istek gönderilmeden ÖNCE çalışır.
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    // 1. Tarayıcı hafızasından token'ı oku
+    const token = localStorage.getItem('authToken');
+    
+    // 2. Eğer token varsa, isteğin başlığına ekle
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // 3. Değiştirilmiş config ile isteğin devam etmesini sağla
+    return config;
+  },
+  (error) => {
+    // İstek hatası durumunda
+    return Promise.reject(error);
+  }
+);
+// --- INTERCEPTOR SONU ---
+
+
+// Yanıt (response) interceptor'ı aynı kalabilir (hata loglama için)
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response && error.response.data) {
-      const errorData = error.response.data as any; //
-      if (errorData.detail) {
-        if (Array.isArray(errorData.detail) && errorData.detail.length > 0 && errorData.detail[0].msg) {
-          const validationError = errorData.detail[0];
-          const field = validationError.loc ? validationError.loc.join(' -> ') : 'N/A';
-          console.error(`API Validation Error on field ${field}: ${validationError.msg}`);
-          // error.message = `Validation Error on ${field}: ${validationError.msg}`;
-        } else if (typeof errorData.detail === 'string') {
-          console.error('API Error Detail:', errorData.detail);
-          // error.message = errorData.detail;
-        }
-      }
-    } else {
+    if (error.response) {
+      console.error('API Error Detail:', error.response.data);
+    } else if (error.request) {
       console.error('API Network Error or other:', error.message);
     }
     return Promise.reject(error);

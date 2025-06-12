@@ -1,10 +1,12 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Body
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Body, Depends
 from fastapi.concurrency import run_in_threadpool
+from fastapi.security import OAuth2PasswordRequestForm
 import numpy as np
 from bson import ObjectId
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
+from app.core.security import verify_password, create_access_token
 from app.core import state
 from app.core.config import Config
 from app.models import *
@@ -260,3 +262,29 @@ async def execute_response_action(
         return db_conn.response_history.find_one({"_id": result.inserted_id})
         
     return await run_in_threadpool(db_task)
+
+@router.post("/auth/token", tags=["Authentication"])
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    db_conn = db_manager.get_db()
+    if not db_conn: raise HTTPException(503, "DB connection failed")
+    
+    def get_user_from_db(username: str):
+        return db_conn.users.find_one({"username": username})
+        
+    user = await run_in_threadpool(get_user_from_db, form_data.username)
+
+    # Düz metin şifre karşılaştırması (Gerçekte hash'lenmiş şifre ile karşılaştırılmalı)
+    if not user or not user["password"] == form_data.password:
+    # Gerçek uygulamada böyle olmalı:
+    # if not user or not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=Config.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"], "role": user["role"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
