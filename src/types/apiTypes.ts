@@ -123,3 +123,23 @@ export interface UserUpdatePayload {
     role?: string;
     status?: 'active' | 'inactive';
 }
+
+export interface ResponseAction {
+  id: string;
+  title: string;
+  description: string;
+  severity: string;
+  automated: boolean;
+  commands: string[];
+  risk: string;
+}
+
+export interface ResponseHistory {
+  id: string;
+  action_title: string;
+  target: string;
+  status: 'completed' | 'in_progress' | 'failed';
+  executed_by: string;
+  result_message: string;
+  timestamp: string; // ISO date string
+}

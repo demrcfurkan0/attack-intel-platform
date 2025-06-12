@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Body
 from fastapi.concurrency import run_in_threadpool
 import numpy as np
 from bson import ObjectId
@@ -212,3 +212,51 @@ async def update_user(user_id: str, payload: UserUpdate):
     if updated_user_doc is None: raise HTTPException(404, "User not found")
         
     return serialize_mongo_doc(updated_user_doc)
+
+@router.get("/responses/actions", response_model=List[ResponseAction], tags=["Response"])
+async def get_recommended_actions():
+    """
+    Önceden tanımlanmış yanıt eylemlerini döndürür. Gelecekte bu dinamik olabilir.
+    """
+    actions = [
+        {"_id": "block_ip", "title": "Block Malicious IP", "description": "Immediately block the attacking IP address...", "severity": "High", "automated": True, "commands": ["iptables -A INPUT -s ... -j DROP"], "risk": "Low"},
+        {"_id": "isolate_host", "title": "Isolate Infected Host", "description": "Quarantine the compromised workstation...", "severity": "Critical", "automated": True, "commands": ["network isolate ..."], "risk": "Medium"},
+        {"_id": "enable_ddos_protection", "title": "Enable DDoS Protection", "description": "Activate advanced DDoS mitigation...", "severity": "High", "automated": True, "commands": ["cloudflare enable_ddos_protection"], "risk": "Low"},
+    ]
+    return actions
+
+@router.get("/responses/history", response_model=List[ResponseHistory], tags=["Response"])
+async def get_response_history(limit: int = 10):
+    """Yanıt eylem geçmişini döndürür."""
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "DB connection failed")
+    def db_task():
+        return list(db_conn.response_history.find().sort("timestamp", -1).limit(limit))
+    return await run_in_threadpool(db_task)
+
+@router.post("/responses/execute", response_model=ResponseHistory, status_code=201, tags=["Response"])
+async def execute_response_action(
+    action_title: str = Body(...), 
+    target_prediction_id: str = Body(default="custom"),
+    executed_by: str = Body(default="analyst")
+):
+    """
+    Bir yanıt eylemini 'yürütür' ve geçmişe kaydeder.
+    """
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "DB connection failed")
+
+    new_history_entry = {
+        "action_title": action_title,
+        "target": f"Alert ID: {target_prediction_id}",
+        "status": "completed", # Şimdilik her eylemi anında başarılı sayalım
+        "executed_by": executed_by,
+        "result_message": f"Action '{action_title}' was executed successfully.",
+        "timestamp": datetime.utcnow()
+    }
+    
+    def db_task():
+        result = db_conn.response_history.insert_one(new_history_entry)
+        return db_conn.response_history.find_one({"_id": result.inserted_id})
+        
+    return await run_in_threadpool(db_task)

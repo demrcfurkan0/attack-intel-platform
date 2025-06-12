@@ -1,5 +1,5 @@
 # attack-simulation/app/models.py
-
+from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
@@ -32,4 +32,29 @@ class UserInDB(UserBase):
         from_attributes=True,
         arbitrary_types_allowed=True,
         json_encoders={ObjectId: str},
+    )
+    
+class ResponseAction(BaseModel):
+    id: str = Field(..., alias="_id")
+    title: str
+    description: str
+    severity: str
+    automated: bool
+    commands: List[str]
+    risk: str
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+class ResponseHistory(BaseModel):
+    id: str = Field(..., alias="_id")
+    action_title: str
+    target: str
+    status: str
+    executed_by: str
+    result_message: str
+    timestamp: datetime
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+        arbitrary_types_allowed=True,
+        json_encoders={ObjectId: str, datetime: lambda dt: dt.isoformat()},
     )

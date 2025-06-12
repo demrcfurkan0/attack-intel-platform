@@ -1,6 +1,5 @@
-// src/pages/Index.tsx
-
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,9 +12,8 @@ import AttackLogVisualization from '@/components/AttackLogVisualization';
 import ResponseCenter from '@/components/ResponseCenter';
 import UserManagement from '@/components/UserManagement';
 import { Shield, AlertTriangle, Activity, Target, Users, Loader2 } from 'lucide-react';
-import { getAttackTrends, getDetectionMetrics } from '@/services/statisticsService';
-import { DetectionMetricsResponse } from '@/types/apiTypes';
 
+// Prop tipleri
 interface DashboardData {
   detected_attacks: number;
   benign_traffic: number;
@@ -28,6 +26,20 @@ interface IndexPageProps {
 
 const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // --- ROTA KONTROL MANTIĞI ---
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Aktif sekmenin state'i. Başlangıç değeri URL'den alınır.
+  const [activeTab, setActiveTab] = useState(location.pathname.replace('/', '') || 'dashboard');
+
+  // Kullanıcı bir sekmeye tıkladığında hem state'i hem de URL'i günceller.
+  const handleTabChange = (tabValue: string) => {
+    setActiveTab(tabValue);
+    navigate(`/${tabValue}`);
+  };
+  // --- ROTA KONTROL SONU ---
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -50,7 +62,6 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
                 <div className="flex items-center space-x-6">
                     <div className="text-sm text-gray-400">{currentTime.toLocaleTimeString()}</div>
                     <div className="flex items-center space-x-2"><div className="status-indicator status-normal" /><span>System operational</span></div>
-                    {/* Active Alerts sayısını canlı veriyle güncelleyelim */}
                     <Badge variant="destructive" className="bg-cyber-accent">{isLoading ? '...' : data.detected_attacks} Active Alerts</Badge>
                 </div>
             </div>
@@ -58,9 +69,9 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
       </header>
 
       <main className="container mx-auto px-6 py-8">
-        <Tabs defaultValue="dashboard" className="w-full">
+        {/* Kontrollü Tabs bileşeni */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           
-          {/* --- STİL DÜZELTMESİ BURADA --- */}
           <TabsList className="grid w-full grid-cols-6 bg-cyber-darker border border-cyber-light/30">
             <TabsTrigger value="dashboard" className="data-[state=active]:bg-cyber-primary data-[state=active]:text-cyber-dark"><Activity className="w-4 h-4 mr-2" />Dashboard</TabsTrigger>
             <TabsTrigger value="simulation" className="data-[state=active]:bg-cyber-primary data-[state=active]:text-cyber-dark"><Target className="w-4 h-4 mr-2" />Simulation</TabsTrigger>
@@ -69,14 +80,13 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
             <TabsTrigger value="response" className="data-[state=active]:bg-cyber-primary data-[state=active]:text-cyber-dark"><Shield className="w-4 h-4 mr-2" />Response</TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-cyber-primary data-[state=active]:text-cyber-dark"><Users className="w-4 h-4 mr-2" />Users</TabsTrigger>
           </TabsList>
-          {/* --- STİL DÜZELTMESİ SONU --- */}
           
           <TabsContent value="dashboard" className="mt-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Detected Attacks</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-accent">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.detected_attacks.toLocaleString()}</div></CardContent></Card>
+              <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Detected Attacks</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-accent">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.detected_attacks}</div></CardContent></Card>
               <Card className="glass-morphism border-cyber-secondary/30"><CardHeader><CardTitle className="text-sm font-medium">Detection Rate</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-primary">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : `${detectionRate.toFixed(1)}%`}</div></CardContent></Card>
-              <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Total Simulations</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-warning">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.total_simulations.toLocaleString()}</div></CardContent></Card>
-              <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Analyzed Benign</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-secondary">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.benign_traffic.toLocaleString()}</div></CardContent></Card>
+              <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Total Simulations</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-warning">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.total_simulations}</div></CardContent></Card>
+              <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Analyzed Benign</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-secondary">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.benign_traffic}</div></CardContent></Card>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <AttackTrendsChart />
