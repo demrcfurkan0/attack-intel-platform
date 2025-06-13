@@ -18,3 +18,8 @@ def serialize_pydantic_for_mongo(pydantic_model_instance: BaseModel) -> dict:
         else:
             serialized_dict[key] = value
     return serialized_dict
+
+def serialize_mongo_doc(doc: dict) -> dict:
+    if "_id" in doc:
+        doc["_id"] = str(doc["_id"])
+    return doc

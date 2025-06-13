@@ -1,19 +1,19 @@
 import apiClient from '../lib/apiClient';
 import {
-  DDoSParams,
-  BruteForceParams,
-  SQLInjectionParams,
+  DDoSRequestPayload,
+  BruteForceRequestPayload,
+  SQLInjectionRequestPayload,
   SimulationStartResponse
 } from '../types/apiTypes';
 
-export const startDdosSimulation = (params: DDoSParams) => {
+export const startDdosSimulation = (params: DDoSRequestPayload) => {
   return apiClient.post<SimulationStartResponse>('/api/simulate/ddos', params);
 };
 
-export const startBruteForceSimulation = (params: BruteForceParams) => {
+export const startBruteForceSimulation = (params: BruteForceRequestPayload) => {
   return apiClient.post<SimulationStartResponse>('/api/simulate/bruteforce', params);
 };
 
-export const startSqliSimulation = (params: SQLInjectionParams) => {
+export const startSqliSimulation = (params: SQLInjectionRequestPayload) => {
   return apiClient.post<SimulationStartResponse>('/api/simulate/sqlinjection', params);
 };

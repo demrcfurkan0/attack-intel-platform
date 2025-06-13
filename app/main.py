@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.event_handler import startup_event, shutdown_event
 from app.routes import router as api_router
 from app.core.ws_manager import manager as ws_manager
+from fastapi.security import OAuth2PasswordBearer
 
 
 app = FastAPI(
@@ -23,7 +24,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # geçici olarak wildcard aç
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
