@@ -6,7 +6,8 @@ from bson import ObjectId
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
-from app.core.security import verify_password, create_access_token
+from app.core.security import get_password_hash, verify_password, create_access_token
+
 from app.core import state
 from app.core.config import Config
 from app.models import *
@@ -19,8 +20,9 @@ router = APIRouter(prefix="/api")
 # --- YARDIMCI FONKSİYON ---
 def serialize_mongo_doc(doc):
     if not doc: return None
-    doc['id'] = str(doc['_id'])
-    del doc['_id']
+    if '_id' in doc:
+        doc['id'] = str(doc['_id'])
+        del doc['_id'] # Pydantic modelinde _id olmadığı için bunu silmek önemli
     for key, value in doc.items():
         if isinstance(value, datetime):
             doc[key] = value.isoformat()
@@ -144,32 +146,63 @@ async def get_users():
     
     return await run_in_threadpool(db_task)
 
+# --- KULLANICI YÖNETİMİ (NİHAİ VERSİYON) ---
+
 @router.post("/users", response_model=UserInDB, status_code=201, tags=["Users"])
 async def create_user(user: UserCreate):
-    """Yeni bir kullanıcı oluşturur."""
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database connection failed")
-
-    def db_task():
-        if db_conn.users.find_one({"username": user.username}):
-            return {"error": "Username already exists"}
-        if db_conn.users.find_one({"email": user.email}):
-            return {"error": "Email already exists"}
-        
-        # Pydantic modelini dict'e çevir ve DB'ye ekle
+    if db_conn is None: raise HTTPException(503, "Database not connected")
+    
+    def db_action():
+        if db_conn.users.find_one({"$or": [{"username": user.username}, {"email": user.email}]}):
+            return {"error": "Username or email already exists."}
         user_dict = user.dict()
         result = db_conn.users.insert_one(user_dict)
-        
-        # Eklenen kullanıcıyı bul ve döndür
         return db_conn.users.find_one({"_id": result.inserted_id})
 
-    new_user_doc = await run_in_threadpool(db_task)
+    created_user = await run_in_threadpool(db_action)
 
-    if not new_user_doc: raise HTTPException(500, "Failed to create user")
-    if "error" in new_user_doc: raise HTTPException(409, detail=new_user_doc["error"])
+    if not created_user:
+        raise HTTPException(500, "Failed to create user.")
+    if "error" in created_user:
+        raise HTTPException(409, detail=created_user["error"])
     
-    # Dönen sonucu da manuel olarak serileştir ve döndür
-    return serialize_mongo_doc(new_user_doc)
+    # --- DÖNÜŞÜ MANUEL OLARAK SERİLEŞTİR ---
+    return serialize_mongo_doc(created_user)
+
+@router.get("/users", response_model=List[UserInDB], tags=["Users"])
+async def get_users():
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "Database not connected")
+    def db_call():
+        # --- DÖNÜŞÜ MANUEL OLARAK SERİLEŞTİR ---
+        return [serialize_mongo_doc(doc) for doc in db_conn.users.find()]
+    return await run_in_threadpool(db_call)
+
+
+@router.patch("/users/{user_id}", response_model=UserInDB, tags=["Users"])
+async def update_user(user_id: str, payload: UserUpdate):
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "Database not connected")
+    try: obj_id = ObjectId(user_id)
+    except: raise HTTPException(400, "Invalid ID format")
+    
+    def db_action():
+        update_data = payload.dict(exclude_unset=True)
+        if not update_data: return "NoData"
+        
+        result = db_conn.users.update_one({"_id": obj_id}, {"$set": update_data})
+        if result.matched_count == 0: return None
+        
+        return db_conn.users.find_one({"_id": obj_id})
+
+    updated_user = await run_in_threadpool(db_action)
+    
+    if updated_user == "NoData": raise HTTPException(400, "No update data provided")
+    if updated_user is None: raise HTTPException(404, "User not found")
+        
+    # --- DÖNÜŞÜ MANUEL OLARAK SERİLEŞTİR ---
+    return serialize_mongo_doc(updated_user)
 
 @router.delete("/users/{user_id}", status_code=204, tags=["Users"])
 async def delete_user(user_id: str):
@@ -188,32 +221,6 @@ async def delete_user(user_id: str):
     if deleted_count == 0:
         raise HTTPException(404, "User not found")
     return
-
-@router.patch("/users/{user_id}", response_model=UserInDB, tags=["Users"])
-async def update_user(user_id: str, payload: UserUpdate):
-    """Kullanıcının durumunu veya rolünü günceller."""
-    db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database connection failed")
-    try:
-        obj_id = ObjectId(user_id)
-    except Exception:
-        raise HTTPException(400, "Invalid User ID format")
-
-    def db_task():
-        update_data = payload.dict(exclude_unset=True)
-        if not update_data: return "NoData"
-        
-        result = db_conn.users.update_one({"_id": obj_id}, {"$set": update_data})
-        if result.matched_count == 0: return None
-        
-        return db_conn.users.find_one({"_id": obj_id})
-
-    updated_user_doc = await run_in_threadpool(db_task)
-
-    if updated_user_doc == "NoData": raise HTTPException(400, "No update data provided")
-    if updated_user_doc is None: raise HTTPException(404, "User not found")
-        
-    return serialize_mongo_doc(updated_user_doc)
 
 @router.get("/responses/actions", response_model=List[ResponseAction], tags=["Response"])
 async def get_recommended_actions():
@@ -266,17 +273,15 @@ async def execute_response_action(
 @router.post("/auth/token", tags=["Authentication"])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     db_conn = db_manager.get_db()
-    if not db_conn: raise HTTPException(503, "DB connection failed")
-    
+    if db_conn is None: raise HTTPException(503, "DB connection failed")
+
     def get_user_from_db(username: str):
         return db_conn.users.find_one({"username": username})
-        
+    
     user = await run_in_threadpool(get_user_from_db, form_data.username)
 
-    # Düz metin şifre karşılaştırması (Gerçekte hash'lenmiş şifre ile karşılaştırılmalı)
-    if not user or not user["password"] == form_data.password:
-    # Gerçek uygulamada böyle olmalı:
-    # if not user or not verify_password(form_data.password, user["hashed_password"]):
+    # --- HASH'LENMİŞ ŞİFREYİ DOĞRULA ---
+    if not user or not verify_password(form_data.password, user.get("hashed_password", "")):
         raise HTTPException(
             status_code=401,
             detail="Incorrect username or password",

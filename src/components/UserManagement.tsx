@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Users, UserPlus, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getUsers, createUser, deleteUser, updateUser } from '@/services/userService';
@@ -19,51 +19,40 @@ const UserManagement = () => {
   const [newUser, setNewUser] = useState<UserCreatePayload>({
     username: '', email: '', role: 'SOC Operator', password: ''
   });
+  // Bir işlem yapıldığında (create, update, delete), listeyi yenilemek için bu state'i tetikleyeceğiz.
+  const [triggerRefetch, setTriggerRefetch] = useState(0);
   const { toast } = useToast();
   
-  const fetchUsers = async () => {
-    setIsLoading(true);
-    try {
-      const response = await getUsers();
-      const rawUsers: any[] = response.data || []; 
-      
-      // Gelen veriyi, 'id' alanı garanti olan bir formata dönüştür
-      const processedUsers: User[] = rawUsers.map(rawUser => {
-        const userId = rawUser.id || (rawUser._id ? String(rawUser._id) : '');
-        return {
-          id: userId,
-          username: rawUser.username,
-          email: rawUser.email,
-          role: rawUser.role,
-          status: rawUser.status,
-        };
-      }).filter(user => user.id); // ID'si olmayanları filtrele
-
-      setUsers(processedUsers);
-      
-    } catch (error) {
-      toast({ variant: "destructive", title: "Failed to load users." });
-      setUsers([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Bu useEffect, bileşen ilk yüklendiğinde VE her işlemden sonra `triggerRefetch` değiştiğinde çalışır.
   useEffect(() => {
+    const fetchUsers = async () => {
+      setIsLoading(true);
+      try {
+        const response = await getUsers();
+        // Backend'den gelen verinin 'id' içerdiğinden emin oluyoruz (önceki backend düzeltmesiyle)
+        setUsers(response.data || []);
+      } catch (error) {
+        toast({ variant: "destructive", title: "Failed to load users." });
+        setUsers([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
     fetchUsers();
-  }, []);
+  }, [triggerRefetch]); // triggerRefetch her değiştiğinde bu kod yeniden çalışır.
 
   const handleAddUser = async () => {
     if (!newUser.username || !newUser.email || !newUser.password || !newUser.role) {
-      toast({ title: "Validation Error", description: "Please fill all fields.", variant: "destructive" });
+      toast({ title: "Validation Error", description: "Please fill all fields." });
       return;
     }
     try {
       await createUser(newUser);
-      toast({ title: "User Created", description: `User ${newUser.username} has been created.` });
+      toast({ title: "User Created" });
       setIsDialogOpen(false);
       setNewUser({ username: '', email: '', role: 'SOC Operator', password: '' });
-      await fetchUsers();
+      // Listeyi yenilemek için sinyal gönder
+      setTriggerRefetch(c => c + 1);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to create user", description: error.response?.data?.detail });
     }
@@ -74,7 +63,7 @@ const UserManagement = () => {
     try {
       await deleteUser(userId);
       toast({ title: "User Deleted" });
-      await fetchUsers();
+      setTriggerRefetch(c => c + 1); // Listeyi yenilemek için sinyal gönder
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to delete user", description: error.response?.data?.detail });
     }
@@ -85,7 +74,7 @@ const UserManagement = () => {
     try {
       await updateUser(userId, { status: newStatus });
       toast({ title: "Status Updated" });
-      await fetchUsers();
+      setTriggerRefetch(c => c + 1); // Listeyi yenilemek için sinyal gönder
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to update status", description: error.response?.data?.detail });
     }
@@ -117,7 +106,7 @@ const UserManagement = () => {
             <Table>
               <TableHeader><TableRow><TableHead>Username</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
-                {users?.length > 0 ? users.map((user) => (
+                {users?.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.username}</TableCell>
                     <TableCell>{user.email}</TableCell>
@@ -132,9 +121,7 @@ const UserManagement = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                )) : (
-                  <TableRow><TableCell colSpan={5} className="text-center">No users found.</TableCell></TableRow>
-                )}
+                ))}
               </TableBody>
             </Table>
           }
