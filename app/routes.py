@@ -4,6 +4,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from bson import ObjectId
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+from app.core.utils import serialize_mongo_doc  # varsa bu satır yoksa ekle
+import numpy as np
 # Gerekli tüm importlar
 from app.core import state
 from app.core.config import Config
@@ -264,17 +266,23 @@ async def get_recommended_actions():
     return raw_actions
 
 @router.get("/responses/history", response_model=List[ResponseHistory], tags=["Response"])
-async def get_response_history(limit: int = 10):
+async def get_response_history(limit: int = 10, prediction_id: Optional[str] = None):
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
+    if db_conn is None:
+        raise HTTPException(503, "DB connection failed")
     
     def db_task():
-        cursor = db_conn.response_history.find().sort("timestamp", -1).limit(limit)
+        query = {}
+        if prediction_id:
+            try:
+                query["target_prediction_id"] = ObjectId(prediction_id)
+            except:
+                pass
+        cursor = db_conn.response_history.find(query).sort("timestamp", -1).limit(limit)
         return [serialize_mongo_doc(doc) for doc in cursor]
     
     return await run_in_threadpool(db_task)
 
-from app.core.utils import serialize_mongo_doc  # varsa bu satır yoksa ekle
 
 @router.post("/responses/execute", response_model=ResponseHistory, status_code=201, tags=["Response"])
 async def execute_response_action(
@@ -290,13 +298,14 @@ async def execute_response_action(
         raise HTTPException(503, "DB connection failed")
 
     new_history_entry = {
-        "action_title": action_title,
-        "target": f"Alert ID: {target_prediction_id}",
-        "status": "completed",
-        "executed_by": executed_by,
-        "result_message": f"Action '{action_title}' was executed successfully.",
-        "timestamp": datetime.utcnow()
-    }
+    "action_title": action_title,
+    "target": f"Alert ID: {target_prediction_id}",
+    "target_prediction_id": ObjectId(target_prediction_id),  # 🔥 yeni eklendi
+    "status": "completed",
+    "executed_by": executed_by,
+    "result_message": f"Action '{action_title}' was executed successfully.",
+    "timestamp": datetime.utcnow()
+}
 
     def db_task():
         result = db_conn.response_history.insert_one(new_history_entry)

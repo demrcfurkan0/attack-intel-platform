@@ -112,6 +112,7 @@ async def run_ddos_simulation(
             # --- YENİ: Her istekten sonra hem ilerlemeyi bildir hem de AI tahminini tetikle ---
             # 1. AI Tahminini tetikle (bunu beklemeden devam etmesi için bir görev olarak başlatabiliriz)
             asyncio.create_task(trigger_prediction(simulation_run_id))
+            print(f"[TRIGGER] Sending fake features to prediction endpoint for sim_id: {simulation_run_id}")
             
             # 2. WebSocket'e ilerleme bildir (her 50 istekte bir)
             if total_requests_made % 50 == 0 or total_requests_made == params.num_requests:

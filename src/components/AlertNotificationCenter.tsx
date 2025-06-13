@@ -1,5 +1,3 @@
-// src/components/AlertNotificationCenter.tsx
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,26 +14,26 @@ const AlertNotificationCenter = () => {
   const { toast } = useToast();
   const [lastShownAlertId, setLastShownAlertId] = useState<string | null>(null);
 
-  const severityMap: { [key: string]: { label: string, color: string } } = {
+  const severityMap: { [key: string]: { label: string; color: string } } = {
     'DoS/DDoS': { label: 'Critical', color: 'bg-cyber-accent' },
     'BruteForce': { label: 'High', color: 'bg-cyber-warning' },
     'SQL_Injection': { label: 'Critical', color: 'bg-cyber-accent' },
-    'default': { label: 'Medium', color: 'bg-cyber-secondary' }
+    default: { label: 'Medium', color: 'bg-cyber-secondary' },
   };
 
   const getSeverity = (predictionLabel: string) => {
     return severityMap[predictionLabel] || severityMap.default;
   };
-  
+
   useEffect(() => {
     const fetchAlerts = async () => {
       if (alerts.length === 0) setIsLoading(true);
       setError(null);
-      
+
       try {
         const response = await getPredictionLogs({ limit: 10 });
         const newAlerts = response.data.data;
-        
+
         setAlerts(newAlerts);
 
         if (newAlerts.length > 0) {
@@ -44,13 +42,13 @@ const AlertNotificationCenter = () => {
             toast({
               title: `🚨 ATTACK DETECTED: ${latestAlert.prediction_result.prediction_label}`,
               description: `Source: ${latestAlert.source_of_data}`,
-              variant: "destructive"
+              variant: 'destructive',
             });
             setLastShownAlertId(latestAlert._id);
           }
         }
       } catch (err) {
-        setError("Could not load alerts.");
+        setError('Could not load alerts.');
         console.error(err);
       } finally {
         setIsLoading(false);
@@ -59,12 +57,15 @@ const AlertNotificationCenter = () => {
 
     fetchAlerts();
     const intervalId = setInterval(fetchAlerts, 5000);
-
     return () => clearInterval(intervalId);
   }, [lastShownAlertId, toast]);
 
   if (isLoading) {
-    return <div className="flex justify-center items-center h-40"><Loader2 className="w-8 h-8 animate-spin text-cyber-primary" /></div>;
+    return (
+      <div className="flex justify-center items-center h-40">
+        <Loader2 className="w-8 h-8 animate-spin text-cyber-primary" />
+      </div>
+    );
   }
 
   if (error) {
@@ -98,9 +99,7 @@ const AlertNotificationCenter = () => {
                   <div className="space-y-1">
                     <div className="flex items-center space-x-3">
                       <h4 className="font-medium text-gray-200">{alert.prediction_result.prediction_label}</h4>
-                      <Badge className={`${severity.color} text-white`}>
-                        {severity.label}
-                      </Badge>
+                      <Badge className={`${severity.color} text-white`}>{severity.label}</Badge>
                     </div>
                     <AlertDescription className="text-gray-300">
                       Source: {alert.source_of_data}

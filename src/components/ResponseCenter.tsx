@@ -1,110 +1,102 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-// ... diğer tüm UI importların ...
-import { getRecommendedActions, getResponseHistory, executeAction } from '@/services/responseService';
-import { ResponseAction, ResponseHistory } from '@/types/apiTypes';
+import React, { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ShieldCheck, Loader2 } from 'lucide-react';
+import { getResponseHistory, executeResponseAction } from '@/services/responseService';
+import { ResponseHistory } from '@/types/apiTypes';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlayCircle, Clock, CheckCircle, StopCircle, Bot, Shield } from 'lucide-react';
 
 const ResponseCenter = () => {
-  const [actions, setActions] = useState<ResponseAction[]>([]);
-  const [history, setHistory] = useState<ResponseHistory[]>([]);
+  const [responses, setResponses] = useState<ResponseHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [executingId, setExecutingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      const [actionsRes, historyRes] = await Promise.all([
-        getRecommendedActions(),
-        getResponseHistory()
-      ]);
-      setActions(actionsRes.data);
-      setHistory(historyRes.data);
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Failed to load response data.' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
+    const fetchResponses = async () => {
+      setIsLoading(true);
+      try {
+        const response = await getResponseHistory();
+        setResponses(response.data);
+      } catch (err) {
+        console.error(err);
+        setError("Could not load response history.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchResponses();
   }, []);
 
-  const handleExecute = async (actionId: string, title: string) => {
-    setExecutingId(actionId);
+  const handleExecuteAction = async (action: string, predictionId: string) => {
     try {
-      await executeAction({
-        action_title: title,
-        target_prediction_id: actionId,
-        executed_by: "furkan"
+      const res = await executeResponseAction(action, predictionId);
+      toast({
+        title: '✅ Action Executed',
+        description: res.data.result_message,
       });
-      toast({ title: "Action Executed", description: `${title} has been logged.` });
-      await fetchData(); // Yanıt geçmişini yenile
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Execution Failed' });
-    } finally {
-      setExecutingId(null);
+    } catch (err) {
+      toast({
+        title: '❌ Action Failed',
+        description: 'An error occurred while executing the response.',
+        variant: 'destructive',
+      });
+      console.error(err);
     }
   };
 
-  // Kartlar için verileri hesapla
-  const historyStats = useMemo(() => {
-    return {
-      in_progress: history.filter(h => h.status === 'in_progress').length,
-      completed: history.filter(h => h.status === 'completed').length,
-      failed: history.filter(h => h.status === 'failed').length,
-    }
-  }, [history]);
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-40"><Loader2 className="w-8 h-8 animate-spin text-cyber-primary" /></div>;
+  }
+
+  if (error) {
+    return <Alert variant="destructive">{error}</Alert>;
+  }
 
   return (
-    <div className="space-y-6">
-      {/* 1. Kısım: İstatistik Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Bu kartların verilerini 'historyStats'ten alıyoruz */}
-        <Card><CardHeader><CardTitle>Active Responses</CardTitle></CardHeader><CardContent>{historyStats.in_progress}</CardContent></Card>
-        <Card><CardHeader><CardTitle>Completed Today</CardTitle></CardHeader><CardContent>{historyStats.completed}</CardContent></Card>
-        <Card><CardHeader><CardTitle>Failed Actions</CardTitle></CardHeader><CardContent>{historyStats.failed}</CardContent></Card>
-      </div>
-
-      {/* 2. Kısım: Önerilen Eylemler */}
-      <Card>
-        <CardHeader><CardTitle>AI-Recommended Response Actions</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? <Loader2 className="animate-spin" /> : actions.map(action => (
-            <Alert key={action.id}>
-              {/* ... Alert içeriği action verisiyle doldurulacak ... */}
-              <div className="font-medium">{action.title}</div>
-              <Button onClick={() => handleExecute(action.id, action.title)} disabled={!!executingId}>
-                {executingId === action.id ? <Loader2 className="animate-spin" /> : <PlayCircle />} Execute
-              </Button>
+    <Card className="glass-morphism border-cyber-light/30">
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <ShieldCheck className="w-5 h-5 text-cyber-primary" />
+          <span>Incident Response Log</span>
+        </CardTitle>
+        <CardDescription>Latest actions taken in response to threats</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {responses.length === 0 ? (
+          <p className="text-gray-400">No response actions have been recorded yet.</p>
+        ) : (
+          responses.map((res) => (
+            <Alert key={res.id} className="border-cyber-light/30 bg-cyber-darker/50">
+              <div className="space-y-1">
+                <h4 className="font-medium text-gray-200">{res.action_title}</h4>
+                <AlertDescription className="text-gray-300">{res.result_message}</AlertDescription>
+                <div className="text-sm text-gray-400">
+                  Target: {res.target}<br />
+                  By: {res.executed_by} | {new Date(res.timestamp).toLocaleString()}
+                </div>
+                <div className="mt-2 flex space-x-2">
+                  <button
+                    className="bg-cyber-warning text-black px-3 py-1 rounded text-sm hover:bg-cyber-warning/80 transition"
+                    onClick={() => handleExecuteAction("Alert Admin", res.id)}
+                  >
+                    Alert Admin
+                  </button>
+                  <button
+                    className="bg-cyber-accent text-white px-3 py-1 rounded text-sm hover:bg-cyber-accent/80 transition"
+                    onClick={() => handleExecuteAction("Block IP", res.id)}
+                  >
+                    Block IP
+                  </button>
+                </div>
+              </div>
             </Alert>
-          ))}
-        </CardContent>
-      </Card>
-      
-      {/* 3. Kısım: Custom Action (Aynı kalabilir) */}
-      <Card>{/* ... */}</Card>
-
-      {/* 4. Kısım: Yanıt Geçmişi */}
-      <Card>
-        <CardHeader><CardTitle>Response History</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {isLoading ? <Loader2 className="animate-spin" /> : history.map(entry => (
-            <div key={entry.id}>
-              <div>{entry.action_title}</div>
-              <div className="text-sm">Target: {entry.target}</div>
-              <Badge>{entry.status}</Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 };
 
