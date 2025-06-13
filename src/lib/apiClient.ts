@@ -3,12 +3,9 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: 'http://localhost:8000',
+  withCredentials: false, // veya true – eğer JWT/token cookie ile gönderiliyorsa
 });
-
 // --- YENİ INTERCEPTOR ---
 // Bu fonksiyon, her istek gönderilmeden ÖNCE çalışır.
 apiClient.interceptors.request.use(

@@ -1,33 +1,43 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Body, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Body
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
-import numpy as np
 from bson import ObjectId
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
-from app.core.security import get_password_hash, verify_password, create_access_token
-
+# Gerekli tüm importlar
 from app.core import state
 from app.core.config import Config
 from app.models import *
 from app.database import db_manager, log_to_db
 from app.simulations import *
 from app.services.simulation_handler import handle_simulation_and_log
+from .core.security import create_access_token, get_password_hash, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter(prefix="/api")
 
 # --- YARDIMCI FONKSİYON ---
 def serialize_mongo_doc(doc):
     if not doc: return None
+    # _id'yi id'ye çevir ve string yap
     if '_id' in doc:
         doc['id'] = str(doc['_id'])
-        del doc['_id'] # Pydantic modelinde _id olmadığı için bunu silmek önemli
+        del doc['_id']
+    # Datetime'ı string'e çevir
     for key, value in doc.items():
         if isinstance(value, datetime):
             doc[key] = value.isoformat()
     return doc
 
+
+def serialize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(doc.get("_id", "")),
+        "username": doc.get("username", ""),
+        "email": doc.get("email", ""),
+        "role": doc.get("role", ""),
+        "status": doc.get("status", "inactive"),
+    }
 # --- ENDPOINT'LER ---
 
 @router.get("/", tags=["General"])
@@ -132,95 +142,109 @@ def serialize_mongo_doc(doc):
             doc[key] = value.isoformat()
     return doc
 
-# --- KULLANICI YÖNETİMİ (NİHAİ, EN SAĞLAM VERSİYON) ---
-
-@router.get("/users", response_model=List[UserInDB], tags=["Users"])
-async def get_users():
-    """Tüm kullanıcıları listeler."""
-    db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database connection failed")
-    
-    def db_task():
-        # Veritabanından gelen her dokümanı manuel olarak serileştir
-        return [serialize_mongo_doc(user) for user in db_conn.users.find()]
-    
-    return await run_in_threadpool(db_task)
-
 # --- KULLANICI YÖNETİMİ (NİHAİ VERSİYON) ---
 
+@router.post("/auth/token", tags=["Authentication"])
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "Database connection failed")
+
+    def get_user_from_db(): return db_conn.users.find_one({"username": form_data.username})
+    user = await run_in_threadpool(get_user_from_db)
+
+    if not user or not verify_password(form_data.password, user.get("password", "")):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    
+    expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = create_access_token(data={"sub": user["username"]}, expires_delta=expires)
+    return {"access_token": token, "token_type": "bearer"}
+
+# --- KULLANICI YÖNETİMİ (SERİLEŞTİRME İLE) ---
+@router.post("/auth/token", tags=["Authentication"])
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "DB connection failed")
+    
+    def get_user(): return db_conn.users.find_one({"username": form_data.username})
+    user = await run_in_threadpool(get_user)
+
+    if not user or not verify_password(form_data.password, user.get("password", "")):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    
+    token = create_access_token(data={"sub": user["username"]})
+    return {"access_token": token, "token_type": "bearer"}
+
+# --- KULLANICI YÖNETİMİ ---
 @router.post("/users", response_model=UserInDB, status_code=201, tags=["Users"])
 async def create_user(user: UserCreate):
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database not connected")
+    if db_conn is None: raise HTTPException(503, "DB connection failed")
     
-    def db_action():
-        if db_conn.users.find_one({"$or": [{"username": user.username}, {"email": user.email}]}):
-            return {"error": "Username or email already exists."}
+    def db_task():
+        if db_conn.users.find_one({"username": user.username}): return {"error": "Username exists"}
         user_dict = user.dict()
+        user_dict["password"] = get_password_hash(user.password)
         result = db_conn.users.insert_one(user_dict)
         return db_conn.users.find_one({"_id": result.inserted_id})
+        
+    new_user = await run_in_threadpool(db_task)
+    if "error" in new_user: raise HTTPException(409, detail=new_user["error"])
+    return serialize_user(new_user)
 
-    created_user = await run_in_threadpool(db_action)
-
-    if not created_user:
-        raise HTTPException(500, "Failed to create user.")
-    if "error" in created_user:
-        raise HTTPException(409, detail=created_user["error"])
-    
-    # --- DÖNÜŞÜ MANUEL OLARAK SERİLEŞTİR ---
-    return serialize_mongo_doc(created_user)
-
-@router.get("/users", response_model=List[UserInDB], tags=["Users"])
+@router.get("/users", tags=["Users"])
 async def get_users():
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database not connected")
-    def db_call():
-        # --- DÖNÜŞÜ MANUEL OLARAK SERİLEŞTİR ---
-        return [serialize_mongo_doc(doc) for doc in db_conn.users.find()]
-    return await run_in_threadpool(db_call)
+    if db_conn is None:
+        raise HTTPException(503, "DB connection failed")
 
+    def db_task():
+        try:
+            raw_users = list(db_conn.users.find())
+            serialized_users = [serialize_user(doc) for doc in raw_users]
+            return serialized_users
+        except Exception as e:
+            import traceback
+            print("❌ DB ERROR:", traceback.format_exc())
+            raise HTTPException(status_code=500, detail="Database error")
+
+    return await run_in_threadpool(db_task)
+
+@router.delete("/users/{user_id}", status_code=204, tags=["Users"])
+async def delete_user(user_id: str):
+    db_conn = db_manager.get_db()
+    if db_conn is None: raise HTTPException(503, "DB connection failed")
+    try: obj_id = ObjectId(user_id)
+    except: raise HTTPException(400, "Invalid ID format")
+    def db_task(): return db_conn.users.delete_one({"_id": obj_id}).deleted_count
+    if await run_in_threadpool(db_task) == 0: raise HTTPException(404, "User not found")
 
 @router.patch("/users/{user_id}", response_model=UserInDB, tags=["Users"])
 async def update_user(user_id: str, payload: UserUpdate):
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database not connected")
-    try: obj_id = ObjectId(user_id)
-    except: raise HTTPException(400, "Invalid ID format")
-    
-    def db_action():
-        update_data = payload.dict(exclude_unset=True)
-        if not update_data: return "NoData"
-        
-        result = db_conn.users.update_one({"_id": obj_id}, {"$set": update_data})
-        if result.matched_count == 0: return None
-        
-        return db_conn.users.find_one({"_id": obj_id})
+    if db_conn is None:
+        raise HTTPException(503, "DB connection failed")
 
-    updated_user = await run_in_threadpool(db_action)
-    
-    if updated_user == "NoData": raise HTTPException(400, "No update data provided")
-    if updated_user is None: raise HTTPException(404, "User not found")
-        
-    # --- DÖNÜŞÜ MANUEL OLARAK SERİLEŞTİR ---
-    return serialize_mongo_doc(updated_user)
-
-@router.delete("/users/{user_id}", status_code=204, tags=["Users"])
-async def delete_user(user_id: str):
-    """Belirtilen ID'ye sahip kullanıcıyı siler."""
-    db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "Database connection failed")
     try:
         obj_id = ObjectId(user_id)
-    except Exception:
-        raise HTTPException(400, "Invalid User ID format")
+    except:
+        raise HTTPException(400, "Invalid ID format")
+
+    update_data = payload.dict(exclude_unset=True)
+    print("Update data:", update_data)  # ⬅️ DEBUG: konsolda veriyi gör
+
+    if not update_data:
+        raise HTTPException(400, "No update data provided")
 
     def db_task():
-        return db_conn.users.delete_one({"_id": obj_id}).deleted_count
+        res = db_conn.users.update_one({"_id": obj_id}, {"$set": update_data})
+        if res.matched_count == 0:
+            return None
+        return db_conn.users.find_one({"_id": obj_id})
 
-    deleted_count = await run_in_threadpool(db_task)
-    if deleted_count == 0:
+    user = await run_in_threadpool(db_task)
+    if not user:
         raise HTTPException(404, "User not found")
-    return
+    return serialize_user(user)  # ⬅️ JSON dönüşümü unutma
 
 @router.get("/responses/actions", response_model=List[ResponseAction], tags=["Response"])
 async def get_recommended_actions():
@@ -270,26 +294,15 @@ async def execute_response_action(
         
     return await run_in_threadpool(db_task)
 
+# --- YENİ AUTHENTICATION ENDPOINT'İ ---
 @router.post("/auth/token", tags=["Authentication"])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     db_conn = db_manager.get_db()
-    if db_conn is None: raise HTTPException(503, "DB connection failed")
-
-    def get_user_from_db(username: str):
-        return db_conn.users.find_one({"username": username})
-    
-    user = await run_in_threadpool(get_user_from_db, form_data.username)
-
-    # --- HASH'LENMİŞ ŞİFREYİ DOĞRULA ---
-    if not user or not verify_password(form_data.password, user.get("hashed_password", "")):
-        raise HTTPException(
-            status_code=401,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=Config.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["username"], "role": user["role"]}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    if db_conn is None: raise HTTPException(503, "Database connection failed")
+    def db_task(): return db_conn.users.find_one({"username": form_data.username})
+    user = await run_in_threadpool(db_task)
+    if not user or not verify_password(form_data.password, user.get("password", "")):
+        raise HTTPException(status_code=401, detail="Incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
+    token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = create_access_token(data={"sub": user["username"]}, expires_delta=token_expires)
+    return {"access_token": token, "token_type": "bearer"}

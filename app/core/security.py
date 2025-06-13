@@ -4,6 +4,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import Config
 
+SECRET_KEY = "YOUR_SUPER_SECRET_KEY" # MUTLAKA GÜÇLÜ VE GİZLİ BİR ANAHTARLA DEĞİŞTİRİN! .env'den alınmalı.
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -13,26 +13,34 @@ class PredictionOutput(BaseModel):
     prediction_id: int
     probabilities: Optional[List[float]] = None
     processed_features_count: int
+    
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return str(v)
 
 # --- Kullanıcı Modelleri ---
 class UserBase(BaseModel):
-    username: str
-    email: EmailStr
-    role: str
-    status: str = "active"
+    username: str; email: EmailStr; role: str; status: str = "active"
+    
 class UserCreate(UserBase):
     password: str
+    
 class UserUpdate(BaseModel):
-    role: Optional[str] = None
-    status: Optional[str] = None
-class UserInDB(UserBase):
-    id: str = Field(..., alias='_id')
-    model_config = ConfigDict(
-        populate_by_name=True,
-        from_attributes=True,
-        arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str},
-    )
+    role: Optional[str] = None; status: Optional[str] = None
+    
+class UserInDB(BaseModel):
+    id: str
+    username: str
+    email: str
+    role: str
+    status: str
     
 class ResponseAction(BaseModel):
     id: str = Field(..., alias="_id")

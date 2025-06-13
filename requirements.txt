@@ -13,6 +13,7 @@ scikit-learn
 websockets
 python-dotenv
 pydantic[email]
-passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
+passlib
+bcrypt

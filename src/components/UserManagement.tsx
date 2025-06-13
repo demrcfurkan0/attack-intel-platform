@@ -19,40 +19,36 @@ const UserManagement = () => {
   const [newUser, setNewUser] = useState<UserCreatePayload>({
     username: '', email: '', role: 'SOC Operator', password: ''
   });
-  // Bir işlem yapıldığında (create, update, delete), listeyi yenilemek için bu state'i tetikleyeceğiz.
-  const [triggerRefetch, setTriggerRefetch] = useState(0);
   const { toast } = useToast();
   
-  // Bu useEffect, bileşen ilk yüklendiğinde VE her işlemden sonra `triggerRefetch` değiştiğinde çalışır.
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const response = await getUsers();
+      console.log("Fetched users:", response.data); // 👈 burayı ekle
+      setUsers(response.data || []);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Failed to load users." });
+      setUsers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchUsers = async () => {
-      setIsLoading(true);
-      try {
-        const response = await getUsers();
-        // Backend'den gelen verinin 'id' içerdiğinden emin oluyoruz (önceki backend düzeltmesiyle)
-        setUsers(response.data || []);
-      } catch (error) {
-        toast({ variant: "destructive", title: "Failed to load users." });
-        setUsers([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchUsers();
-  }, [triggerRefetch]); // triggerRefetch her değiştiğinde bu kod yeniden çalışır.
+  }, []);
 
   const handleAddUser = async () => {
     if (!newUser.username || !newUser.email || !newUser.password || !newUser.role) {
-      toast({ title: "Validation Error", description: "Please fill all fields." });
-      return;
+      toast({ title: "Validation Error", description: "Please fill all fields." }); return;
     }
     try {
       await createUser(newUser);
       toast({ title: "User Created" });
       setIsDialogOpen(false);
       setNewUser({ username: '', email: '', role: 'SOC Operator', password: '' });
-      // Listeyi yenilemek için sinyal gönder
-      setTriggerRefetch(c => c + 1);
+      await fetchUsers();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to create user", description: error.response?.data?.detail });
     }
@@ -63,7 +59,7 @@ const UserManagement = () => {
     try {
       await deleteUser(userId);
       toast({ title: "User Deleted" });
-      setTriggerRefetch(c => c + 1); // Listeyi yenilemek için sinyal gönder
+      await fetchUsers();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to delete user", description: error.response?.data?.detail });
     }
@@ -73,10 +69,20 @@ const UserManagement = () => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
     try {
       await updateUser(userId, { status: newStatus });
+  
+      // ✅ State'i doğrudan güncelle
+      setUsers(prev =>
+        prev.map(user =>
+          user.id === userId ? { ...user, status: newStatus } : user
+        )
+      );
       toast({ title: "Status Updated" });
-      setTriggerRefetch(c => c + 1); // Listeyi yenilemek için sinyal gönder
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Failed to update status", description: error.response?.data?.detail });
+      toast({
+        variant: "destructive",
+        title: "Failed to update status",
+        description: error.response?.data?.detail || 'An error occurred.',
+      });
     }
   };
 
@@ -107,17 +113,16 @@ const UserManagement = () => {
               <TableHeader><TableRow><TableHead>Username</TableHead><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {users?.map((user) => (
-                  <TableRow key={user.id}>
+                  <TableRow key={user.id || (user as any)._id}>
                     <TableCell>{user.username}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>{user.role}</TableCell>
                     <TableCell><Badge variant={user.status === 'active' ? 'default' : 'secondary'}>{user.status}</Badge></TableCell>
                     <TableCell className="text-right space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => handleToggleStatus(user.id, user.status)}>
-                        {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                    <Button size="sm" variant="outline" onClick={() => handleToggleStatus(user.id || (user as any)._id, user.status)}>
+                    {user.status === 'active' ? 'Deactivate' : 'Activate'}
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleDeleteUser(user.id, user.username)}>
-                        Delete
+                      <Button size="sm" variant="destructive" onClick={() => handleDeleteUser(user.id || (user as any)._id, user.username)}>                        Delete
                       </Button>
                     </TableCell>
                   </TableRow>

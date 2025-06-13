@@ -6,6 +6,7 @@ from app.core.event_handler import startup_event, shutdown_event
 from app.routes import router as api_router
 from app.core.ws_manager import manager as ws_manager
 
+
 app = FastAPI(
     title="AI-Driven Cyber Attack Simulation and Response Tool",
     description="Cyber attack simulation, AI-based detection, and reporting.",
@@ -17,9 +18,9 @@ app.add_event_handler("startup", startup_event)
 app.add_event_handler("shutdown", shutdown_event)
 
 origins = [
-    "http://localhost:8080",
-    "http://localhost:5173",
+    "http://localhost:8080",  # 5173 ?
 ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Tüm API rotalarını uygulamaya dahil et
 app.include_router(api_router)
