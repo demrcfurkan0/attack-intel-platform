@@ -58,6 +58,7 @@ async def predict_attack_endpoint(data: PredictionInput):
     output = {"prediction_label": label, "prediction_id": prediction_id, "probabilities": probabilities, "processed_features_count": len(features_ordered)}
     log_data = {"prediction_run_id": str(ObjectId()), "source_of_data": data.source_info, "prediction_result": output, "is_attack": label != "BENIGN"}
     await log_to_db("predictions_log", log_data, db_manager)
+    print(f"🎯 prediction_id: {prediction_id}, label: {label}, label_map_keys: {Config.LABEL_MAP.keys()}")   
     return PredictionOutput(**output)
 
 # --- Simülasyonlar ---
@@ -260,8 +261,9 @@ async def get_recommended_actions():
 
     # _id'yi string'e çevir ve JSON uyumlu hale getir
     for action in raw_actions:
-        action["id"] = str(action["_id"])
-        del action["_id"]
+        action["id"] = str(action.get("_id", ""))
+        action.pop("_id", None)
+
 
     return raw_actions
 
@@ -297,15 +299,16 @@ async def execute_response_action(
     if db_conn is None:
         raise HTTPException(503, "DB connection failed")
 
-    new_history_entry = {
-    "action_title": action_title,
-    "target": f"Alert ID: {target_prediction_id}",
-    "target_prediction_id": ObjectId(target_prediction_id),  # 🔥 yeni eklendi
-    "status": "completed",
-    "executed_by": executed_by,
-    "result_message": f"Action '{action_title}' was executed successfully.",
-    "timestamp": datetime.utcnow()
-}
+    new_history_entry = {        
+        "action_title": action_title,
+        "attack_type": action_title.lower().replace(" ", "_"),
+        "target": f"Alert ID: {target_prediction_id}",
+        "target_prediction_id": ObjectId(target_prediction_id),
+        "status": "completed",
+        "executed_by": executed_by,
+        "result_message": f"Action '{action_title}' was executed successfully.",
+        "timestamp": datetime.utcnow()
+    }
 
     def db_task():
         result = db_conn.response_history.insert_one(new_history_entry)

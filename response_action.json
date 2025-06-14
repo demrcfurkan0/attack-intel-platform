@@ -1,0 +1,38 @@
+[
+  {
+    "attack_type": "ddos",
+    "action_title": "Block IP at Firewall",
+    "severity": "high",
+    "description": "Immediately block the offending IP address at the firewall level."
+  },
+  {
+    "attack_type": "ddos",
+    "action_title": "Rate Limit Traffic",
+    "severity": "medium",
+    "description": "Apply rate limiting rules to the targeted endpoint."
+  },
+  {
+    "attack_type": "brute_force",
+    "action_title": "Lock Account",
+    "severity": "high",
+    "description": "Temporarily lock accounts after multiple failed login attempts."
+  },
+  {
+    "attack_type": "brute_force",
+    "action_title": "Enable CAPTCHA",
+    "severity": "medium",
+    "description": "Add CAPTCHA to the login form to prevent automated attacks."
+  },
+  {
+    "attack_type": "sql_injection",
+    "action_title": "Sanitize Input Fields",
+    "severity": "high",
+    "description": "Ensure all input fields are sanitized and parameterized."
+  },
+  {
+    "attack_type": "sql_injection",
+    "action_title": "Enable WAF",
+    "severity": "medium",
+    "description": "Enable Web Application Firewall to detect SQLi payloads."
+  }
+]

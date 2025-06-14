@@ -6,7 +6,10 @@ import traceback
 from typing import Optional, Dict, Any
 from bson import ObjectId
 import os
+from app.core.config import Config
 
+def get_mongo_client():
+    return MongoClient(Config.MONGO_URI)
 # --- MongoDB Ayarları ---
 # Bu ayarları ortam değişkenlerinden (environment variables) almak daha güvenli ve esnektir.
 MONGO_URI = os.getenv ("MONGO_URI")

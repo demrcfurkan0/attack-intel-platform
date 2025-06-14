@@ -9,6 +9,7 @@ from app.core.ws_manager import manager as ws_manager
 from bson import ObjectId
 import asyncio
 from pymongo.collection import Collection
+from app.database.database import get_mongo_client
 
 async def handle_simulation_and_log(
     sim_type: str,
@@ -19,7 +20,9 @@ async def handle_simulation_and_log(
     start_time = datetime.now(timezone.utc)
     simulation_run_id = str(ObjectId())
     params_for_mongo = serialize_pydantic_for_mongo(params)
-
+    target_ip = getattr(params, 'target_ip', 'N/A')
+    packet_rate = getattr(params, 'packet_rate', 'N/A')
+    duration_seconds = getattr(params, 'duration_seconds', 'N/A')
     target_url_str = str(getattr(params, 'target_url', 'N/A'))
     target_method_value = "N/A"
     if hasattr(params, 'method') and isinstance(params.method, Enum): 
@@ -28,8 +31,14 @@ async def handle_simulation_and_log(
     initial_log_data = {
         "simulation_id": simulation_run_id,
         "simulation_type": sim_type,
-        "target_details": {"url": target_url_str, "method": target_method_value},
+        "target_details": {
+            "url": target_url_str,
+            "method": target_method_value,
+            "ip": target_ip
+        },
         "parameters_used": params_for_mongo,
+        "packet_rate": packet_rate,
+        "duration_seconds": duration_seconds,
         "status": "running",
         "start_time": start_time,
         "summary": {"message": "Simulation initiated..."},
@@ -42,6 +51,7 @@ async def handle_simulation_and_log(
         sim_collection = db_conn.simulations_log
         try:
             await asyncio.to_thread(sim_collection.insert_one, initial_log_data)
+            print("📥 Inserting initial simulation log...")
         except Exception as e:
             print(f"❌ Error writing initial log: {e}")
             sim_collection = None
@@ -100,3 +110,5 @@ async def handle_simulation_and_log(
         "status": f"{sim_type.upper()} simulation started in background",
         "simulation_run_id": simulation_run_id
     }
+    
+    

@@ -138,8 +138,9 @@ export interface ResponseHistory {
   id: string;
   action_title: string;
   target: string;
-  status: 'completed' | 'in_progress' | 'failed';
+  attack_type?: string; // 👈 bunu ekle
   executed_by: string;
   result_message: string;
-  timestamp: string; // ISO date string
+  timestamp: string;
+  target_prediction_id: string; // 🔥 bunu ekleyin
 }

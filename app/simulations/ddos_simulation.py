@@ -8,6 +8,8 @@ import random
 import time
 import os
 from app.core import state
+from app.services.simulation_handler import handle_simulation_and_log
+
 
 # --- YENİ BÖLÜM: AI MODELİNİ BESLEMEK İÇİN ---
 
@@ -143,6 +145,9 @@ async def run_ddos_simulation(
     result = {
         "target_url": str(params.target_url),
         "method": params.method.value,
+        "target_ip": getattr(params, "target_ip", "N/A"),
+        "packet_rate": getattr(params, "packet_rate", "N/A"),
+        "duration_seconds": getattr(params, "duration_seconds", "N/A"),
         "total_requests_attempted": params.num_requests,
         "successful_requests": successful_requests,
         "failed_requests": failed_requests,
