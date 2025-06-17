@@ -31,3 +31,9 @@ class SQLInjectionParams(BaseModel):
     base_value_for_param: Optional[str] = Field(None, description="Base value of the parameter to be injected (payload can be appended/prepended to it)")
     payload_categories: List[str] = Field(default_factory=lambda: ["error_based", "boolean_based", "time_based_light", "union_light"])
     error_indicator_texts: List[str] = Field(default_factory=lambda: ["sql syntax", "unclosed quotation mark", "odbc driver error", "mysql_fetch_array()", "you have an error in your sql syntax"])
+
+class SYNFloodParams(BaseModel):
+    target_ip: str = Field(description="The IP address of the target machine.")
+    target_port: int = Field(80, gt=0, le=65535, description="The target port on the machine (e.g., 80 for HTTP, 443 for HTTPS).")
+    num_packets: int = Field(1000, gt=0, le=100000, description="Total number of SYN packets to send.")
+    delay_seconds: float = Field(0.01, ge=0, description="Delay in seconds between sending each packet.")

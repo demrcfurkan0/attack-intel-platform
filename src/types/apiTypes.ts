@@ -144,3 +144,10 @@ export interface ResponseHistory {
   timestamp: string;
   target_prediction_id: string; // 🔥 bunu ekleyin
 }
+
+export interface SYNFloodRequestPayload {
+  target_ip: string;
+  target_port?: number;
+  num_packets?: number;
+  delay_seconds?: number;
+}

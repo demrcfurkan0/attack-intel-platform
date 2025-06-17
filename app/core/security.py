@@ -5,7 +5,6 @@ from passlib.context import CryptContext
 from app.core.config import Config
 from fastapi.security import OAuth2PasswordBearer
 
-SECRET_KEY = "YOUR_SUPER_SECRET_KEY" # MUTLAKA GÜÇLÜ VE GİZLİ BİR ANAHTARLA DEĞİŞTİRİN! .env'den alınmalı.
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

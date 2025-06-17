@@ -3,7 +3,9 @@ import {
   DDoSRequestPayload,
   BruteForceRequestPayload,
   SQLInjectionRequestPayload,
-  SimulationStartResponse
+  SimulationStartResponse,
+  SYNFloodRequestPayload
+  
 } from '../types/apiTypes';
 
 export const startDdosSimulation = (params: DDoSRequestPayload) => {
@@ -16,4 +18,8 @@ export const startBruteForceSimulation = (params: BruteForceRequestPayload) => {
 
 export const startSqliSimulation = (params: SQLInjectionRequestPayload) => {
   return apiClient.post<SimulationStartResponse>('/api/simulate/sqlinjection', params);
+};
+
+export const startSynFloodSimulation = (params: SYNFloodRequestPayload) => {
+  return apiClient.post<SimulationStartResponse>('/api/simulate/synflood', params);
 };

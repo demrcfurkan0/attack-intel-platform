@@ -1,12 +1,13 @@
 import asyncio
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure, OperationFailure # OperationFailure eklendi
+from pymongo.errors import ConnectionFailure, OperationFailure 
 from datetime import datetime, timezone
 import traceback
 from typing import Optional, Dict, Any
 from bson import ObjectId
 import os
 from app.core.config import Config
+from fastapi import HTTPException
 
 def get_mongo_client():
     return MongoClient(Config.MONGO_URI)
@@ -160,6 +161,10 @@ async def log_to_db(collection_name: str, data: Dict[str, Any], db_instance: Dat
         print(traceback.format_exc())
         return None
 
-# Global bir veritabanı yöneticisi örneği oluşturuyoruz
-# Bu, FastAPI uygulamasının farklı yerlerinden aynı veritabanı bağlantısını kullanabilmesini sağlar.
 db_manager = Database()
+
+def get_db_dependency():
+    db = db_manager.get_db()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database connection is not available.")
+    return db

@@ -1,35 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Shield, Loader2 } from 'lucide-react';
-import { getDetectionMetrics } from '@/services/statisticsService'; // Servisimizi import ediyoruz
+import { getDetectionMetrics } from '@/services/statisticsService';
 
 const DetectionMetricsChart = () => {
-  const [metrics, setMetrics] = useState({ detected_attacks: 0, benign_traffic: 0 });
-  const [isLoading, setIsLoading] = useState(true);
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['detectionMetrics'],
+    queryFn: getDetectionMetrics,
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const response = await getDetectionMetrics();
-        setMetrics(response.data);
-      } catch (error) {
-        console.error("Failed to fetch detection metrics:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-    const intervalId = setInterval(fetchData, 30000); // Her 30 saniyede bir veriyi yenile
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // API'den gelen canlı veriyi PieChart formatına dönüştür
   const pieData = [
-    { name: 'Detected Attacks', value: metrics.detected_attacks, color: '#ff4444' }, // Saldırılar için kırmızı
-    { name: 'Analyzed Benign', value: metrics.benign_traffic, color: '#00ff88' }, // Zararsızlar için yeşil
+    { name: 'Detected Attacks', value: data?.data.detected_attacks || 0, color: '#ff4444' },
+    { name: 'Analyzed Benign', value: data?.data.benign_traffic || 0, color: '#00ff88' },
   ];
 
   return (
@@ -42,10 +27,15 @@ const DetectionMetricsChart = () => {
         <CardDescription>Breakdown of AI model's predictions</CardDescription>
       </CardHeader>
       <CardContent>
-        {isLoading ? 
+        {isLoading ? (
           <div className="h-[250px] flex justify-center items-center">
             <Loader2 className="w-8 h-8 animate-spin text-cyber-primary" />
-          </div> :
+          </div>
+        ) : isError ? (
+          <div className="h-[250px] flex justify-center items-center text-red-500">
+            Failed to load metrics.
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -63,7 +53,7 @@ const DetectionMetricsChart = () => {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip 
+                <Tooltip
                   contentStyle={{
                     backgroundColor: 'rgba(10, 15, 28, 0.9)',
                     border: '1px solid rgba(0, 255, 136, 0.3)',
@@ -84,7 +74,7 @@ const DetectionMetricsChart = () => {
               ))}
             </div>
           </div>
-        }
+        )}
       </CardContent>
     </Card>
   );
