@@ -16,34 +16,22 @@ from app.services.simulation_handler import handle_simulation_and_log
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
 def generate_fake_ddos_features():
-    """
-    DDoS saldırısını taklit eden ve modelin beklediği 78 özellik için
-    anlamlı ama sahte veriler üreten bir yardımcı fonksiyon.
-    """
-    # Önce tüm özellikleri 0.0 ile başlat
-    if not state.feature_columns:
-        # Eğer özellik listesi yüklenemediyse boş bir dict döndür, bu bir hata durumudur.
-        print("⚠️ Feature columns not loaded in state. Cannot generate fake features.")
-        return {}
-
-    # state'den gelen tam özellik listesini kullanarak bir sözlük oluştur
+    if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}
     
-    # Şimdi sadece bildiğimiz ve önemli olan özellikleri anormal değerlerle üzerine yazalım
-    # Eğer bir özellik adı yanlış yazılmışsa, bu yapı sayesinde hata vermez, sadece üzerine yazılmaz.
+    # GERÇEK İstatistiklere dayalı, KONTROLLÜ veri üretimi
     features.update({
-        'Flow Duration': random.uniform(50_000, 200_000),
-        'Total Fwd Packets': random.uniform(2, 6),
-        'Total Backward Packets': random.uniform(0, 4),
-        'Fwd Packet Length Max': random.uniform(0, 100),
-        'Flow IAT Mean': random.uniform(10_000, 80_000),
-        'Flow IAT Min': random.uniform(1, 100),
-        'Packet Length Mean': random.uniform(0, 50),
-        'Average Packet Size': random.uniform(0, 60),
-        'Init_Win_bytes_forward': -1.0,
-        'Init_Win_bytes_backward': -1.0
+        'Flow_Duration':            max(0, random.uniform(4.09e+07 - 2e+07, 4.09e+07 + 2e+07)),
+        'Total_Fwd_Packets':        max(0, random.uniform(5.83 - 2, 5.83 + 10)),
+        'Total_Bwd_Packets':        max(0, random.uniform(4.50 - 2, 4.50 + 10)),
+        'Total_Fwd_Bytes':          max(0, random.uniform(959.8 - 400, 959.8 + 1500)),
+        'Total_Bwd_Bytes':          max(0, random.uniform(7967.8 - 3000, 7967.8 + 15000)),
+        'Fwd_Packet_Length_Mean':   max(0, random.uniform(38.59 - 20, 38.59 + 50)),
+        'Bwd_Packet_Length_Mean':   max(0, random.uniform(1258.6 - 500, 1258.6 + 1000)),
+        'Packet_Length_Mean':       max(0, random.uniform(603.7 - 300, 603.7 + 500)),
+        'SYN_Flag_Count':           0,
+        'FIN_Flag_Count':           random.choice([0, 1]),
     })
-
     return features
 
 async def trigger_prediction(simulation_id: str):

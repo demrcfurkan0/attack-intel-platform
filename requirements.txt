@@ -9,7 +9,7 @@ typing
 pymongo
 dotenv
 xgboost
-scikit-learn
+scikit-learn==1.6.1
 websockets
 python-dotenv
 pydantic[email]

@@ -1,1 +1,1 @@
-["Flow Duration", "Total Fwd Packets", "Total Backward Packets"]
+["Flow_Duration", "Total_Fwd_Packets", "Total_Bwd_Packets", "Total_Fwd_Bytes", "Total_Bwd_Bytes", "Fwd_Packet_Length_Mean", "Bwd_Packet_Length_Mean", "Packet_Length_Mean", "SYN_Flag_Count", "FIN_Flag_Count"]

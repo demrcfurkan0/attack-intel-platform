@@ -12,29 +12,24 @@ from app.simulations.utils import HTTPMethod, SQLI_PAYLOADS
 
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
+# sqli_simulation.py içindeki fonksiyonu bununla değiştir
+
 def generate_fake_sqli_features():
-    """
-    SQL Injection saldırılarını, CIC-IDS-2017 veri setindeki istatistiksel
-    profillere daha yakın taklit eden sahte özellikler üretir.
-    """
-    if not state.feature_columns:
-        print("⚠️ Feature columns not loaded in state for SQL Injection.")
-        return {}
-    
+    if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}
-    
-    # SQL Injection'da genellikle bir yöne doğru (istemciden sunucuya) daha büyük paketler gider.
+
+    # GERÇEK İstatistiklere dayalı, KONTROLLÜ veri üretimi
     features.update({
-        'Flow Duration': abs(random.gauss(100000, 60000)),
-        'Total Fwd Packets': abs(random.gauss(5, 2)),
-        'Total Backward Packets': abs(random.gauss(4, 2)),
-        'Fwd Packet Length Max': abs(random.gauss(1000, 400)),
-        'Fwd Packet Length Mean': abs(random.gauss(250, 100)),
-        'Bwd Packet Length Mean': abs(random.gauss(120, 50)),
-        'Flow IAT Mean': abs(random.gauss(20000, 15000)),
-        'Average Packet Size': abs(random.gauss(150, 60)),
-        'PSH Flag Count': 1,
-        'ACK Flag Count': 1,
+        'Flow_Duration':            max(0, random.uniform(2.87e+06 - 1e+06, 2.87e+06 + 2e+06)),
+        'Total_Fwd_Packets':        max(0, random.uniform(3.04 - 1, 3.04 + 3)),
+        'Total_Bwd_Packets':        max(0, random.uniform(2.66 - 1, 2.66 + 3)),
+        'Total_Fwd_Bytes':          max(0, random.uniform(316.0 - 150, 316.0 + 500)), # Payload için
+        'Total_Bwd_Bytes':          max(0, random.uniform(1286.2 - 500, 1286.2 + 1500)), # Hata mesajı için
+        'Fwd_Packet_Length_Mean':   max(0, random.uniform(71.05 - 30, 71.05 + 100)),
+        'Bwd_Packet_Length_Mean':   max(0, random.uniform(327.1 - 150, 327.1 + 300)),
+        'Packet_Length_Mean':       max(0, random.uniform(166.3 - 80, 166.3 + 200)),
+        'SYN_Flag_Count':           0,
+        'FIN_Flag_Count':           0,
     })
     return features
 

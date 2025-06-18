@@ -12,30 +12,23 @@ from app.simulations.simulation_params import BruteForceParams
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
 def generate_fake_brute_force_features():
-    """
-    Brute Force saldırılarını, CIC-IDS-2017 veri setindeki istatistiksel
-    profillere daha yakın taklit eden sahte özellikler üretir.
-    """
-    if not state.feature_columns:
-        print("⚠️ Feature columns not loaded in state for Brute Force.")
-        return {}
-    
+    if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}
-    
-    # Colab analizinden elde edilen veya varsayılan istatistiksel profil
-    # (mean, std) -> random.gauss(mean, std) ile daha gerçekçi değerler üret
+
+    fwd_packets = random.uniform(7, 12)
+    bwd_packets = random.uniform(7, 12)
+
     features.update({
-        'Flow Duration': abs(random.gauss(110000, 50000)),
-        'Total Fwd Packets': abs(random.gauss(3.5, 1.5)),
-        'Total Backward Packets': abs(random.gauss(3.5, 1.5)),
-        'Fwd Packet Length Max': abs(random.gauss(30, 15)),
-        'Fwd Packet Length Mean': abs(random.gauss(15, 10)),
-        'Bwd Packet Length Mean': abs(random.gauss(150, 50)),
-        'Flow IAT Mean': abs(random.gauss(25000, 15000)),
-        'Average Packet Size': abs(random.gauss(100, 40)),
-        'FIN Flag Count': 1,
-        'SYN Flag Count': 1,
-        'PSH Flag Count': random.choice([0, 1]),
+        'Flow_Duration':            random.uniform(2e6, 9e6),       
+        'Total_Fwd_Packets':        fwd_packets,                   
+        'Total_Bwd_Packets':        bwd_packets,
+        'Total_Fwd_Bytes':          fwd_packets * random.uniform(70, 150),  
+        'Total_Bwd_Bytes':          bwd_packets * random.uniform(200, 500), 
+        'Fwd_Packet_Length_Mean':   random.uniform(70, 150),
+        'Bwd_Packet_Length_Mean':   random.uniform(200, 500),
+        'Packet_Length_Mean':       random.uniform(150, 300),
+        'SYN_Flag_Count':           0.0, 
+        'FIN_Flag_Count':           1.0, 
     })
     return features
 

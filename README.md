@@ -2,6 +2,15 @@
 ```
 attack-intel-platform-1
 ├─ .dockerignore
+├─ .pytest_cache
+│  ├─ CACHEDIR.TAG
+│  ├─ README.md
+│  └─ v
+│     └─ cache
+│        ├─ lastfailed
+│        ├─ nodeids
+│        └─ stepwise
+├─ =
 ├─ Dockerfile
 ├─ README.md
 ├─ app
@@ -22,6 +31,7 @@ attack-intel-platform-1
 │  │  └─ database.py
 │  ├─ main.py
 │  ├─ models.py
+│  ├─ pytest.ini
 │  ├─ routes.py
 │  ├─ services
 │  │  ├─ __init__.py
@@ -34,6 +44,7 @@ attack-intel-platform-1
 │     ├─ ddos_simulation.py
 │     ├─ simulation_params.py
 │     ├─ sqli_simulation.py
+│     ├─ syn_flood_simulation.py
 │     └─ utils.py
 ├─ bun.lockb
 ├─ components.json
@@ -63,10 +74,12 @@ attack-intel-platform-1
 │  │  ├─ AttackSimulationPanel.tsx
 │  │  ├─ AttackTrendsChart.tsx
 │  │  ├─ DetectionMetricsChart.tsx
+│  │  ├─ ModelPerformanceMatrix.tsx
 │  │  ├─ PrivateRoute.tsx
 │  │  ├─ ResponseCenter.tsx
 │  │  ├─ UserManagement.tsx
 │  │  ├─ cards
+│  │  │  ├─ ActiveThreatsCard.test.tsx
 │  │  │  ├─ ActiveThreatsCard.tsx
 │  │  │  ├─ DetectionRateCard.tsx
 │  │  │  └─ TotalSimulationsCard.tsx
@@ -122,7 +135,8 @@ attack-intel-platform-1
 │  │     └─ use-toast.ts
 │  ├─ hooks
 │  │  ├─ use-mobile.tsx
-│  │  └─ use-toast.ts
+│  │  ├─ use-toast.ts
+│  │  └─ useSimulationSocket.ts
 │  ├─ index.css
 │  ├─ lib
 │  │  ├─ apiClient.ts
@@ -140,11 +154,17 @@ attack-intel-platform-1
 │  │  ├─ simulationService.ts
 │  │  ├─ statisticsService.ts
 │  │  └─ userService.ts
+│  ├─ setupTests.ts
 │  ├─ types
 │  │  └─ apiTypes.ts
 │  └─ vite-env.d.ts
 ├─ tailwind.config.ts
 ├─ test_input.json
+├─ tests
+│  ├─ __init__.py
+│  ├─ __pycache__
+│  ├─ test_main_api.py
+│  └─ test_user_api.py
 ├─ tsconfig.app.json
 ├─ tsconfig.json
 ├─ tsconfig.node.json

@@ -18,7 +18,9 @@ from app.database import get_db_dependency, log_to_db, db_manager
 from app.simulations import *
 from app.services.simulation_handler import handle_simulation_and_log
 
+import pandas as pd
 import numpy as np
+
 
 router = APIRouter(prefix="/api")
 
@@ -51,12 +53,14 @@ class BlockIPPayload(BaseModel):
 
 @router.post("/predict", response_model=PredictionOutput, tags=["AI Model"])
 async def predict_attack_endpoint(data: PredictionInput, background_tasks: BackgroundTasks, db_conn: any = Depends(get_db_dependency)):
-    if state.model is None or state.scaler is None:
-        raise HTTPException(status_code=503, detail="AI Model or Scaler is not available.")
+    if state.model is None or state.scaler is None or not state.feature_columns:
+        raise HTTPException(status_code=503, detail="AI Model, Scaler, or Feature Columns are not available.")
     
-    features_ordered = [data.features.get(col, 0.0) for col in state.feature_columns]
-    input_array = np.array([features_ordered], dtype=float)
-    scaled_features = state.scaler.transform(input_array)
+    input_df = pd.DataFrame([data.features])
+
+    input_df = input_df.reindex(columns=state.feature_columns, fill_value=0.0)
+    
+    scaled_features = state.scaler.transform(input_df)
     prediction_id = int(state.model.predict(scaled_features)[0])
     
     probabilities = getattr(state.model, 'predict_proba', lambda _: [[]])(scaled_features)[0].tolist() or None
@@ -68,14 +72,14 @@ async def predict_attack_endpoint(data: PredictionInput, background_tasks: Backg
         body = f"A potential security threat has been detected.\n\nType: {label}\nSource: {data.source_info}\nTimestamp: {datetime.now(timezone.utc).isoformat()}"
         background_tasks.add_task(send_alert_email, subject, body)
 
-    output = {"prediction_label": label, "prediction_id": prediction_id, "probabilities": probabilities, "processed_features_count": len(features_ordered)}
+    output = {"prediction_label": label, "prediction_id": prediction_id, "probabilities": probabilities, "processed_features_count": len(input_df.columns)}
     
     log_data = {
         "prediction_run_id": str(ObjectId()),
         "source_of_data": data.source_info,
         "prediction_result": output,
         "is_attack": is_attack,
-        "simulation_id": data.simulation_id  # <-- GÜNCELLENDİ
+        "simulation_id": data.simulation_id
     }
     await log_to_db("predictions_log", log_data, db_manager)
     

