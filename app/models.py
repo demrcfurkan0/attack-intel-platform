@@ -1,19 +1,20 @@
-# attack-simulation/app/models.py
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 
-# --- Prediction Modelleri ---
 class PredictionInput(BaseModel):
     features: Dict[str, float]
     source_info: Optional[str] = "manual_api_call"
+    simulation_id: Optional[str] = None # Bu alan zaten eklenmişti, doğru.
+
 class PredictionOutput(BaseModel):
     prediction_label: str
     prediction_id: int
     probabilities: Optional[List[float]] = None
     processed_features_count: int
-    
+
+# Diğer modeller aynı kalıyor...
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
@@ -25,15 +26,18 @@ class PyObjectId(ObjectId):
             raise ValueError("Invalid ObjectId")
         return str(v)
 
-# --- Kullanıcı Modelleri ---
 class UserBase(BaseModel):
-    username: str; email: EmailStr; role: str; status: str = "active"
+    username: str
+    email: EmailStr
+    role: str
+    status: str = "active"
     
 class UserCreate(UserBase):
     password: str
     
 class UserUpdate(BaseModel):
-    role: Optional[str] = None; status: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
     
 class UserInDB(BaseModel):
     id: str

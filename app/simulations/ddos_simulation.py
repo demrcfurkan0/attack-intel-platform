@@ -13,10 +13,6 @@ from app.services.simulation_handler import handle_simulation_and_log
 
 # --- YENİ BÖLÜM: AI MODELİNİ BESLEMEK İÇİN ---
 
-# Kendi API'mizin adresini ortam değişkeninden almak en iyisidir.
-# Docker içinde servisler arası iletişim için 'http://fastapi:8000' veya 'http://localhost:8000' kullanılabilir.
-# docker-compose.yml dosyasındaki servis adınıza bağlıdır. Varsayılan olarak 'fastapi' konulabilir.
-# Veya Docker ana makine portunu kullanmak daha güvenilir olabilir.
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
 def generate_fake_ddos_features():
@@ -51,24 +47,20 @@ def generate_fake_ddos_features():
     return features
 
 async def trigger_prediction(simulation_id: str):
-    """
-    Sahte trafik verisi üretir ve bunu AI modelinin tahmin endpoint'ine gönderir.
-    """
+    """AI modelinin tahmin endpoint'ini tetikler."""
     try:
         features = generate_fake_ddos_features()
-        
-        # Backend'in kendi kendine istek atması için yeni bir client oluştur
         async with httpx.AsyncClient() as internal_client:
             predict_url = f"{INTERNAL_API_BASE_URL}/api/predict"
             await internal_client.post(
                 predict_url, 
                 json={
                     "features": features, 
-                    "source_info": f"ddos_simulation_run_{simulation_id}"
+                    "source_info": f"ddos_simulation_run_{simulation_id}",
+                    "simulation_id": simulation_id # <-- YENİ ALAN
                 },
                 timeout=10.0
             )
-        # print(f"Prediction triggered for sim_id: {simulation_id}")
     except Exception as e:
         print(f"❌ Error during internal prediction call: {e}")
 

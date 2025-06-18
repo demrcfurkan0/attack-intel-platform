@@ -12,6 +12,7 @@ import AttackLogVisualization from '@/components/AttackLogVisualization';
 import ResponseCenter from '@/components/ResponseCenter';
 import UserManagement from '@/components/UserManagement';
 import { Shield, AlertTriangle, Activity, Target, Users, Loader2 } from 'lucide-react';
+import ModelPerformanceMatrix from '@/components/ModelPerformanceMatrix'; // <-- Yeni import
 
 // Prop tipleri
 interface DashboardData {
@@ -91,6 +92,7 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <AttackTrendsChart />
               <DetectionMetricsChart />
+              <ModelPerformanceMatrix />
             </div>
             <Card className="glass-morphism border-cyber-light/30">
               <CardHeader><CardTitle>Recent Security Alerts</CardTitle><CardDescription>Latest threat detections from AI model</CardDescription></CardHeader>

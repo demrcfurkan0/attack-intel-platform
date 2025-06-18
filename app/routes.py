@@ -1,24 +1,22 @@
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Body
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
 from bson import ObjectId
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
+from pydantic import BaseModel, Field, validator 
+from ipaddress import ip_address 
 
-# Merkezi utility ve config'lerimizi import ediyoruz
 from app.core.utils import serialize_mongo_doc, send_alert_email
 from app.core import state
 from app.core.config import Config
 from app.core.security import create_access_token, get_password_hash, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
 
-# Modeller, veritabanı ve servisler
 from app.models import *
 from app.database import get_db_dependency, log_to_db, db_manager
 from app.simulations import *
 from app.services.simulation_handler import handle_simulation_and_log
-
-from app.simulations import run_synflood_simulation, SYNFloodParams 
-
 
 import numpy as np
 
@@ -39,13 +37,20 @@ def serialize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
 async def read_root():
     return {"message": "API is running!"}
 
+class BlockIPPayload(BaseModel):
+    ip_address: str
+
+    @validator('ip_address')
+    def validate_ip(cls, v):
+        try:
+            ip_address(v)
+            return v
+        except ValueError:
+            raise ValueError(f"{v} is not a valid IP address")
+
 
 @router.post("/predict", response_model=PredictionOutput, tags=["AI Model"])
-async def predict_attack_endpoint(
-    data: PredictionInput,
-    background_tasks: BackgroundTasks,
-    db_conn: any = Depends(get_db_dependency)
-):
+async def predict_attack_endpoint(data: PredictionInput, background_tasks: BackgroundTasks, db_conn: any = Depends(get_db_dependency)):
     if state.model is None or state.scaler is None:
         raise HTTPException(status_code=503, detail="AI Model or Scaler is not available.")
     
@@ -58,52 +63,47 @@ async def predict_attack_endpoint(
     label = Config.LABEL_MAP.get(prediction_id, "Unknown")
     is_attack = label != "BENIGN"
 
-    if is_attack:    
+    if is_attack:
         subject = f"🚨 SECURITY ALERT: {label} Attack Detected!"
-        body = f"""
-        A potential security threat has been detected by the CyberShield AI model.
-
-        Details:
-        - Attack Type: {label}
-        - Source Information: {data.source_info}
-        - Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}
-
-        Please investigate this incident immediately.
-        """
+        body = f"A potential security threat has been detected.\n\nType: {label}\nSource: {data.source_info}\nTimestamp: {datetime.now(timezone.utc).isoformat()}"
         background_tasks.add_task(send_alert_email, subject, body)
 
     output = {"prediction_label": label, "prediction_id": prediction_id, "probabilities": probabilities, "processed_features_count": len(features_ordered)}
     
-    log_data = {"prediction_run_id": str(ObjectId()), "source_of_data": data.source_info, "prediction_result": output, "is_attack": is_attack}
+    log_data = {
+        "prediction_run_id": str(ObjectId()),
+        "source_of_data": data.source_info,
+        "prediction_result": output,
+        "is_attack": is_attack,
+        "simulation_id": data.simulation_id  # <-- GÜNCELLENDİ
+    }
     await log_to_db("predictions_log", log_data, db_manager)
     
     return PredictionOutput(**output)
 
-
-# Simülasyonlar
+# --- Simülasyonlar ---
 @router.post("/simulate/ddos", tags=["Simulations"])
 async def simulate_ddos_endpoint(params: DDoSParams, background_tasks: BackgroundTasks):
-    return await handle_simulation_and_log("ddos", params, run_ddos_simulation, background_tasks)
+    return await handle_simulation_and_log("ddos", params, run_ddos_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(1, "DoS/DDoS"))
 
 @router.post("/simulate/bruteforce", tags=["Simulations"])
 async def simulate_bruteforce_endpoint(params: BruteForceParams, background_tasks: BackgroundTasks):
-    return await handle_simulation_and_log("brute_force", params, run_bruteforce_simulation, background_tasks)
+    return await handle_simulation_and_log("brute_force", params, run_bruteforce_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(2, "BruteForce"))
 
 @router.post("/simulate/sqlinjection", tags=["Simulations"])
 async def simulate_sqlinjection_endpoint(params: SQLInjectionParams, background_tasks: BackgroundTasks):
-    return await handle_simulation_and_log("sql_injection", params, run_sqlinjection_simulation, background_tasks)
+    return await handle_simulation_and_log("sql_injection", params, run_sqlinjection_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(3, "SQL_Injection"))
 
 @router.post("/simulate/synflood", tags=["Simulations"])
 async def simulate_synflood_endpoint(params: SYNFloodParams, background_tasks: BackgroundTasks):
-    return await handle_simulation_and_log("syn_flood", params, run_synflood_simulation, background_tasks)
+    return await handle_simulation_and_log("syn_flood", params, run_synflood_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(1, "DoS/DDoS"))
 
 # --- Raporlar ve İstatistikler ---
 @router.get("/reports/simulations", tags=["Reports"])
 async def get_simulation_reports(limit: int = 20, skip: int = 0, sim_type: Optional[str] = None, db_conn: any = Depends(get_db_dependency)):
     def db_task():
         query = {}
-        if sim_type and sim_type.strip():
-            query["simulation_type"] = sim_type.lower().strip()
+        if sim_type and sim_type.strip(): query["simulation_type"] = sim_type.lower().strip()
         cursor = db_conn.simulations_log.find(query).sort("start_time", -1).skip(skip).limit(limit)
         logs = [serialize_mongo_doc(doc) for doc in cursor]
         total_count = db_conn.simulations_log.count_documents(query)
@@ -147,6 +147,81 @@ async def get_detection_metrics(db_conn: any = Depends(get_db_dependency)):
             else:
                 metrics["benign_traffic"] = res.get('count', 0)
         return metrics
+    return await run_in_threadpool(db_task)
+
+@router.get("/stats/model-performance", tags=["Statistics"])
+async def get_model_performance(db_conn: any = Depends(get_db_dependency)):
+    """
+    Calculates a confusion matrix by comparing the ground truth from simulations
+    with the model's predictions.
+    """
+    
+    # Tüm etiketleri al (BENIGN dahil)
+    all_labels = list(Config.LABEL_MAP.values())
+    
+    # Aggregation Pipeline
+    pipeline = [
+        # 1. Adım: Sadece tamamlanmış ve `ground_truth_label`'i olan simülasyonları al
+        {
+            "$match": {
+                "status": "completed",
+                "ground_truth_label": {"$exists": True}
+            }
+        },
+        # 2. Adım: `predictions_log` koleksiyonu ile birleştir (SQL'deki LEFT JOIN gibi)
+        {
+            "$lookup": {
+                "from": "predictions_log",
+                "localField": "simulation_id",
+                "foreignField": "simulation_id",
+                "as": "predictions"
+            }
+        },
+        # 3. Adım: Birleştirilmiş diziyi aç (her tahmin için ayrı bir belge oluştur)
+        {
+            "$unwind": "$predictions"
+        },
+        # 4. Adım: Gerçek etiket ve tahmin edilen etikete göre grupla ve say
+        {
+            "$group": {
+                "_id": {
+                    "ground_truth": "$ground_truth_label",
+                    "predicted": "$predictions.prediction_result.prediction_label"
+                },
+                "count": {"$sum": 1}
+            }
+        },
+        # 5. Adım: Daha kolay işlemek için sonucu yeniden şekillendir
+        {
+            "$group": {
+                "_id": "$_id.ground_truth",
+                "predictions": {
+                    "$push": {
+                        "predicted_label": "$_id.predicted",
+                        "count": "$count"
+                    }
+                }
+            }
+        }
+    ]
+
+    def db_task():
+        # Başlangıçta boş bir matris oluştur
+        confusion_matrix = {true_label: {pred_label: 0 for pred_label in all_labels} for true_label in all_labels}
+
+        results = list(db_conn.simulations_log.aggregate(pipeline))
+
+        # Veritabanından gelen sonuçlarla matrisi doldur
+        for result in results:
+            true_label = result["_id"]
+            if true_label in confusion_matrix:
+                for pred in result["predictions"]:
+                    predicted_label = pred["predicted_label"]
+                    if predicted_label in confusion_matrix[true_label]:
+                        confusion_matrix[true_label][predicted_label] = pred["count"]
+        
+        return confusion_matrix
+
     return await run_in_threadpool(db_task)
 
 
@@ -220,6 +295,34 @@ async def delete_user(user_id: str, db_conn: any = Depends(get_db_dependency)):
 
 
 # --- Response Actions ---
+@router.post("/responses/block-ip", status_code=201, tags=["Response"])
+async def block_ip_address(
+    payload: BlockIPPayload,
+    db_conn: any = Depends(get_db_dependency)
+):
+    ip_to_block = payload.ip_address
+    
+    block_record = {
+        "ip_address": ip_to_block,
+        "blocked_at": datetime.now(timezone.utc),
+        "reason": "Blocked in response to a detected threat."
+    }
+    
+    def db_task():
+        result = db_conn.blocked_ips.update_one(
+            {"ip_address": ip_to_block},
+            {"$set": block_record},
+            upsert=True
+        )
+        return result.upserted_id is not None or result.matched_count > 0
+
+    success = await run_in_threadpool(db_task)
+
+    if success:
+        return {"message": f"IP address {ip_to_block} has been successfully added to the blocklist."}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update blocklist.")
+
 @router.get("/responses/actions", response_model=List[ResponseAction], tags=["Response"])
 async def get_recommended_actions(db_conn: any = Depends(get_db_dependency)):
     def db_task():

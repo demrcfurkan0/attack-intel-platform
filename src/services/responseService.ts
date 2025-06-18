@@ -31,3 +31,7 @@ export const executeResponseAction = async (
     executed_by,
   });
 };
+
+export const blockIpAddress = (ipAddress: string) => {
+  return apiClient.post('/api/responses/block-ip', { ip_address: ipAddress });
+};

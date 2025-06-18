@@ -50,7 +50,7 @@ export interface SimulationLog {
   _id: string;
   simulation_id: string;
   simulation_type: 'ddos' | 'brute_force' | 'sql_injection';
-  target_details: { url: string; method: string; };
+  target_details: { url: string; method: string; ip?: string; };
   parameters_used: any;
   status: "completed" | "failed" | "running";
   start_time: string;
@@ -150,4 +150,10 @@ export interface SYNFloodRequestPayload {
   target_port?: number;
   num_packets?: number;
   delay_seconds?: number;
+}
+
+export interface ModelPerformanceResponse {
+  [trueLabel: string]: {
+    [predictedLabel: string]: number;
+  };
 }

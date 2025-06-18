@@ -1,21 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertTriangle, Bell, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle, Bell, Loader2, Ban } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { getPredictionLogs } from '@/services/reportService';
-import { PredictionLog } from '@/types/apiTypes';
+import { blockIpAddress } from '@/services/responseService';
+import { Button } from '@/components/ui/button';
+import { AxiosResponse } from 'axios';
+import { PaginatedPredictionsResponse } from '@/types/apiTypes';
 
 const AlertNotificationCenter = () => {
-  const [alerts, setAlerts] = useState<PredictionLog[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const [lastShownAlertId, setLastShownAlertId] = useState<string | null>(null);
+
+  const { data: alertsResponse, isLoading, isError } = useQuery({
+    queryKey: ['predictionLogs'],
+    queryFn: () => getPredictionLogs({ limit: 10 }),
+    refetchInterval: 5000
+  });
+
+  const alerts = alertsResponse?.data.data || [];
+
+  // IP engelleme işlemi için useMutation hook'u
+  const blockIpMutation = useMutation({
+    mutationFn: blockIpAddress,
+    onSuccess: (data: any) => {
+        toast({
+            title: "Action Successful",
+            description: data.data.message,
+        });
+    },
+    onError: (error: any) => {
+        toast({
+            variant: "destructive",
+            title: "Action Failed",
+            description: error.response?.data?.detail || "Could not block IP address.",
+        });
+    },
+  });
+
+  // Bu yardımcı fonksiyon, kaynak bilgisinden IP adresini ayıklamaya çalışır.
+  // Gerçek uygulamada bu format daha standart olmalıdır.
+  const extractIpFromSource = (sourceInfo: string): string | null => {
+    // Basit bir regex ile IP adresi arayalım.
+    const ipRegex = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
+    const match = sourceInfo.match(ipRegex);
+    return match ? match[0] : '127.0.0.1'; // Bulamazsa varsayılan döndür
+  };
 
   const severityMap: { [key: string]: { label: string; color: string } } = {
     'DoS/DDoS': { label: 'Critical', color: 'bg-cyber-accent' },
+    'SYN_FLOOD': { label: 'Critical', color: 'bg-cyber-accent' },
     'BruteForce': { label: 'High', color: 'bg-cyber-warning' },
     'SQL_Injection': { label: 'Critical', color: 'bg-cyber-accent' },
     default: { label: 'Medium', color: 'bg-cyber-secondary' },
@@ -25,52 +61,59 @@ const AlertNotificationCenter = () => {
     return severityMap[predictionLabel] || severityMap.default;
   };
 
-  useEffect(() => {
-    const fetchAlerts = async () => {
-      if (alerts.length === 0) setIsLoading(true);
-      setError(null);
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center items-center h-40">
+          <Loader2 className="w-8 h-8 animate-spin text-cyber-primary" />
+        </div>
+      );
+    }
 
-      try {
-        const response = await getPredictionLogs({ limit: 10 });
-        const newAlerts = response.data.data;
+    if (isError) {
+      return <Alert variant="destructive">Could not load alerts.</Alert>;
+    }
 
-        setAlerts(newAlerts);
+    if (alerts.length === 0) {
+      return <p className="text-gray-400">No attacks detected yet. Run a simulation to see results.</p>;
+    }
 
-        if (newAlerts.length > 0) {
-          const latestAlert = newAlerts[0];
-          if (latestAlert._id !== lastShownAlertId) {
-            toast({
-              title: `🚨 ATTACK DETECTED: ${latestAlert.prediction_result.prediction_label}`,
-              description: `Source: ${latestAlert.source_of_data}`,
-              variant: 'destructive',
-            });
-            setLastShownAlertId(latestAlert._id);
-          }
-        }
-      } catch (err) {
-        setError('Could not load alerts.');
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    return alerts.map((alert) => {
+      const severity = getSeverity(alert.prediction_result.prediction_label);
+      const sourceIp = extractIpFromSource(alert.source_of_data);
 
-    fetchAlerts();
-    const intervalId = setInterval(fetchAlerts, 5000);
-    return () => clearInterval(intervalId);
-  }, [lastShownAlertId, toast]);
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-40">
-        <Loader2 className="w-8 h-8 animate-spin text-cyber-primary" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return <Alert variant="destructive">{error}</Alert>;
-  }
+      return (
+        <Alert key={alert._id} className="border-cyber-light/30 bg-cyber-darker/50 flex flex-col space-y-2">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="h-4 w-4 text-cyber-accent" />
+            <AlertTitle className="flex-grow font-medium text-gray-200">
+              {alert.prediction_result.prediction_label}
+            </AlertTitle>
+            <Badge className={`${severity.color} text-white`}>{severity.label}</Badge>
+          </div>
+          <AlertDescription className="text-gray-300 pl-7">
+            Source: {alert.source_of_data}
+          </AlertDescription>
+          <div className="text-sm text-gray-400 pl-7">
+            Detected at: {new Date(alert.created_at).toLocaleString()}
+          </div>
+          {sourceIp && (
+            <div className="pl-7 pt-2">
+              <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => blockIpMutation.mutate(sourceIp)}
+                  disabled={blockIpMutation.isPending}
+              >
+                  {blockIpMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4 mr-2" />}
+                  Block IP: {sourceIp}
+              </Button>
+            </div>
+          )}
+        </Alert>
+      );
+    });
+  };
 
   return (
     <Card className="glass-morphism border-cyber-light/30">
@@ -87,32 +130,7 @@ const AlertNotificationCenter = () => {
         <CardDescription>Real-time threat detections from the AI model</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {alerts.length === 0 ? (
-          <p className="text-gray-400">No attacks detected yet. Run a simulation to see results.</p>
-        ) : (
-          alerts.map((alert) => {
-            const severity = getSeverity(alert.prediction_result.prediction_label);
-            return (
-              <Alert key={alert._id} className="border-cyber-light/30 bg-cyber-darker/50">
-                <AlertTriangle className="h-4 w-4 text-cyber-accent" />
-                <div className="flex items-start justify-between w-full">
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-3">
-                      <h4 className="font-medium text-gray-200">{alert.prediction_result.prediction_label}</h4>
-                      <Badge className={`${severity.color} text-white`}>{severity.label}</Badge>
-                    </div>
-                    <AlertDescription className="text-gray-300">
-                      Source: {alert.source_of_data}
-                    </AlertDescription>
-                    <div className="text-sm text-gray-400">
-                      Detected at: {new Date(alert.created_at).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </Alert>
-            );
-          })
-        )}
+        {renderContent()}
       </CardContent>
     </Card>
   );

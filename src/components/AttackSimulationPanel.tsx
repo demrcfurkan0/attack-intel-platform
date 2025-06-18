@@ -16,8 +16,9 @@ import { getSimulationLogs } from '../services/reportService';
 import { SimulationLog } from '../types/apiTypes';
 
 const AttackSimulationPanel = () => {
-    const [attackType, setAttackType] = useState<'ddos' | 'brute_force' | 'sql_injection' | 'syn_flood' | ''>('');
-    const [target, setTarget] = useState('127.0.0.1'); // Default olarak IP adresi ile başlatalım
+    type AttackType = 'ddos' | 'brute_force' | 'sql_injection' | 'syn_flood' | '';
+    const [attackType, setAttackType] = useState<AttackType>('');
+    const [target, setTarget] = useState('127.0.0.1');
     const [params, setParams] = useState<any>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [activeSimulationId, setActiveSimulationId] = useState<string | null>(null);
@@ -31,10 +32,11 @@ const AttackSimulationPanel = () => {
         { value: 'syn_flood', label: 'SYN Flood (Network)' },
     ];
 
-    const { data: recentSimulations, isLoading: isLoadingLogs } = useQuery({
+    const { data: recentSimulationsResponse, isLoading: isLoadingLogs } = useQuery({
         queryKey: ['recentSimulations'],
         queryFn: () => getSimulationLogs({ limit: 5 }),
         refetchInterval: 5000,
+        placeholderData: (previousData) => previousData,
     });
     
     const { statusMessage, progress, isFinished } = useSimulationSocket(activeSimulationId);
@@ -47,7 +49,7 @@ const AttackSimulationPanel = () => {
     }, [isFinished, queryClient]);
 
     const handleParamChange = (field: string, value: any) => setParams((prev) => ({ ...prev, [field]: value }));
-    const handleNumericParamChange = (field: string, value: string) => handleParamChange(field, parseInt(value) || undefined);
+    const handleNumericParamChange = (field: string, value: string) => handleParamChange(field, value ? parseInt(value) : undefined);
 
     const handleStartSimulation = async () => {
         if (!attackType) {
@@ -63,10 +65,12 @@ const AttackSimulationPanel = () => {
         setIsSubmitting(true);
         try {
             let response;
-            // SYN Flood için payload yapısı farklı, diğerleri için aynı
+            
+            // Payload'u saldırı tipine göre doğru şekilde oluştur
+            const commonParams = { ...params };
             const payload = attackType === 'syn_flood' 
-                ? { target_ip: target, ...params }
-                : { target_url: target, ...params };
+                ? { target_ip: target, ...commonParams }
+                : { target_url: target, ...commonParams };
 
             switch (attackType) {
                 case 'ddos': response = await startDdosSimulation(payload); break;
@@ -75,6 +79,7 @@ const AttackSimulationPanel = () => {
                 case 'syn_flood': response = await startSynFloodSimulation(payload); break;
                 default: throw new Error("Invalid attack type selected");
             }
+            
             setActiveSimulationId(response.data.simulation_run_id);
             toast({ title: "Simulation Initialized! 🚀", description: "Connecting to real-time feed..." });
             
@@ -102,8 +107,8 @@ const AttackSimulationPanel = () => {
             case 'brute_force':
                 return (
                     <>
-                        <div><Label htmlFor="usernames">Usernames (comma-separated)</Label><Input id="usernames" placeholder="admin,user,root" onChange={(e) => handleParamChange('usernames', e.target.value.split(',').map(p => p.trim()))} /></div>
-                        <div><Label htmlFor="passwords">Passwords (comma-separated)</Label><Input id="passwords" placeholder="password,123456" onChange={(e) => handleParamChange('passwords', e.target.value.split(',').map(p => p.trim()))} /></div>
+                        <div><Label htmlFor="usernames">Usernames (comma-separated)</Label><Input id="usernames" placeholder="admin,user,root" onChange={(e) => handleParamChange('usernames', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} /></div>
+                        <div><Label htmlFor="passwords">Passwords (comma-separated)</Label><Input id="passwords" placeholder="password,123456" onChange={(e) => handleParamChange('passwords', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} /></div>
                     </>
                 );
             case 'sql_injection':
@@ -135,7 +140,18 @@ const AttackSimulationPanel = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <Label htmlFor="attack-type">Attack Type</Label>
-                            <Select onValueChange={(value: any) => { setAttackType(value); setParams({}); }}>
+                            <Select 
+                                onValueChange={(value: AttackType) => {
+                                    setAttackType(value); 
+                                    setParams({});
+                                    // Saldırı türü değiştiğinde hedefi de mantıklı bir varsayılana ayarla
+                                    if (value === 'syn_flood') {
+                                        setTarget('127.0.0.1');
+                                    } else {
+                                        setTarget('https://httpbin.org/post');
+                                    }
+                                }}
+                                >
                                 <SelectTrigger><SelectValue placeholder="Select attack type" /></SelectTrigger>
                                 <SelectContent>
                                     {attackTypes.map((attack) => <SelectItem key={attack.value} value={attack.value}>{attack.label}</SelectItem>)}
@@ -182,7 +198,7 @@ const AttackSimulationPanel = () => {
                         <div className="flex justify-center items-center h-20"><Loader2 className="w-6 h-6 animate-spin"/></div>
                     ) : (
                         <div className="space-y-3">
-                            {(recentSimulations?.data.data.length === 0) ? <p className="text-gray-400">No simulations found.</p> : recentSimulations?.data.data.map((sim: SimulationLog) => (
+                            {(recentSimulationsResponse?.data.data.length === 0) ? <p className="text-gray-400">No simulations found.</p> : recentSimulationsResponse?.data.data.map((sim: SimulationLog) => (
                                 <div key={sim.simulation_id} className="flex items-center justify-between p-3 bg-cyber-darker/50 rounded-lg">
                                     <div className="flex items-center space-x-3">
                                         {sim.status === 'running' && <Loader2 className="w-4 h-4 text-cyber-primary animate-spin" />}
