@@ -7,7 +7,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardContainer from "./pages/DashboardContainer";
 import NotFound from "./pages/NotFound";
-import PrivateRoute from "./components/PrivateRoute"; // Yeni korumalı rotayı import et
+import PrivateRoute from "./components/PrivateRoute"; 
+
+
 
 const queryClient = new QueryClient();
 
@@ -29,6 +31,7 @@ const App = () => (
             <Route path="/simulation" element={<DashboardContainer />} />
             <Route path="/alerts" element={<DashboardContainer />} />
             <Route path="/logs" element={<DashboardContainer />} />
+            <Route path="/response/:predictionId" element={<DashboardContainer />} />          
             <Route path="/response" element={<DashboardContainer />} />
             <Route path="/users" element={<DashboardContainer />} />
           </Route>

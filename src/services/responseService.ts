@@ -35,3 +35,8 @@ export const executeResponseAction = async (
 export const blockIpAddress = (ipAddress: string) => {
   return apiClient.post('/api/responses/block-ip', { ip_address: ipAddress });
 };
+
+export const getIncidentHistory = (predictionId: string) => {
+  return apiClient.get<ResponseHistory[]>(`/api/responses/history/${predictionId}`);
+};
+

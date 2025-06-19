@@ -17,12 +17,18 @@ from app.models import *
 from app.database import get_db_dependency, log_to_db, db_manager
 from app.simulations import *
 from app.services.simulation_handler import handle_simulation_and_log
+from pydantic import BaseModel
+
+from typing import List
 
 import pandas as pd
 import numpy as np
 
 
 router = APIRouter(prefix="/api")
+
+class UpdatePredictionStatus(BaseModel):
+    status: str
 
 
 def serialize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -123,6 +129,43 @@ async def get_prediction_reports(limit: int = 10, skip: int = 0, db_conn: any = 
         total_count = db_conn.predictions_log.count_documents(query)
         return {"total_count": total_count, "data": logs}
     return await run_in_threadpool(db_task)
+
+@router.get("/reports/predictions/{prediction_id}", tags=["Reports"])
+async def get_single_prediction_report(prediction_id: str, db_conn: any = Depends(get_db_dependency)):
+    """Belirtilen ID'ye sahip tek bir tahmin logunu getirir."""
+    if not ObjectId.is_valid(prediction_id):
+        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    
+    def db_task():
+        # Veriyi ObjectId olarak sorgula
+        return db_conn.predictions_log.find_one({"_id": ObjectId(prediction_id)})
+    
+    prediction_doc = await run_in_threadpool(db_task)
+    
+    if prediction_doc is None:
+        raise HTTPException(status_code=404, detail="Prediction log not found")
+        
+    return serialize_mongo_doc(prediction_doc)
+
+@router.patch("/reports/predictions/{prediction_id}/status", tags=["Reports"])
+async def update_prediction_status(prediction_id: str, payload: UpdatePredictionStatus, db_conn: any = Depends(get_db_dependency)):
+    """Bir tahmin logunun durumunu günceller (new, triaged, resolved etc.)."""
+    if not ObjectId.is_valid(prediction_id):
+        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    
+    def db_task():
+        result = db_conn.predictions_log.update_one(
+            {"_id": ObjectId(prediction_id)},
+            {"$set": {"status": payload.status, "last_updated": datetime.now(timezone.utc)}}
+        )
+        return result.matched_count
+
+    matched_count = await run_in_threadpool(db_task)
+    
+    if matched_count == 0:
+        raise HTTPException(status_code=404, detail="Prediction log not found to update")
+        
+    return {"message": f"Status updated to '{payload.status}' successfully."}
 
 @router.get("/stats/attack_trends", tags=["Statistics"])
 async def get_attack_trends(db_conn: any = Depends(get_db_dependency)):
@@ -243,6 +286,20 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(data={"sub": user["username"]}, expires_delta=token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.get("/responses/history/{prediction_id}", response_model=List[ResponseHistory], tags=["Response"])
+async def get_incident_response_history(prediction_id: str, db_conn: any = Depends(get_db_dependency)):
+    """Belirli bir olayla (prediction_id) ilişkili tüm müdahale geçmişini getirir."""
+    if not ObjectId.is_valid(prediction_id):
+        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+
+    def db_task():
+        # target_prediction_id alanına göre filtrele
+        cursor = db_conn.response_history.find(
+            {"target_prediction_id": ObjectId(prediction_id)}
+        ).sort("timestamp", 1) # Eskiden yeniye sırala
+        return [serialize_mongo_doc(doc) for doc in cursor]
+        
+    return await run_in_threadpool(db_task)
 
 # --- Kullanıcı Yönetimi (User Management) ---
 @router.post("/users", response_model=UserInDB, status_code=201, tags=["Users"])

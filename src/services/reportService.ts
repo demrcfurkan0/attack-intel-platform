@@ -1,7 +1,9 @@
 // src/services/reportService.ts
 
 import apiClient from '../lib/apiClient';
-import { PaginatedSimulationsResponse, PaginatedPredictionsResponse } from '../types/apiTypes';
+import { PaginatedSimulationsResponse, PaginatedPredictionsResponse, PredictionLog } from '../types/apiTypes';
+
+
 
 interface GetSimulationLogsParams {
   limit?: number;
@@ -23,3 +25,11 @@ interface GetPredictionLogsParams {
 export const getPredictionLogs = (params: GetPredictionLogsParams = {}) => {
   return apiClient.get<PaginatedPredictionsResponse>('/api/reports/predictions', { params });
 };
+
+export const getPredictionLogById = (id: string) => {
+  return apiClient.get<PredictionLog>(`/api/reports/predictions/${id}`);
+};
+
+export const updatePredictionStatus = (id: string, status: string) => {
+  return apiClient.patch(`/api/reports/predictions/${id}/status`, { status });
+}

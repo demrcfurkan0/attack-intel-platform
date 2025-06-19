@@ -81,7 +81,10 @@ export interface PredictionLog {
   };
   is_attack: boolean;
   created_at: string;
+  simulation_id?: string; // Bu da opsiyonel olabilir
+  status?: string; // <-- HATA GİDEREN SATIR: Opsiyonel status alanı eklendi
 }
+
 
 // Prediction Log'ları için Sayfalanmış Yanıt Tipi
 export interface PaginatedPredictionsResponse {

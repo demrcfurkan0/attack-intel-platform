@@ -1,9 +1,10 @@
+// in: attack-intel-platform/src/pages/Index.tsx
+
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
 import AttackTrendsChart from '@/components/AttackTrendsChart';
 import DetectionMetricsChart from '@/components/DetectionMetricsChart';
 import AttackSimulationPanel from '@/components/AttackSimulationPanel';
@@ -12,7 +13,7 @@ import AttackLogVisualization from '@/components/AttackLogVisualization';
 import ResponseCenter from '@/components/ResponseCenter';
 import UserManagement from '@/components/UserManagement';
 import { Shield, AlertTriangle, Activity, Target, Users, Loader2 } from 'lucide-react';
-import ModelPerformanceMatrix from '@/components/ModelPerformanceMatrix'; // <-- Yeni import
+import ModelPerformanceMatrix from '@/components/ModelPerformanceMatrix';
 
 // Prop tipleri
 interface DashboardData {
@@ -31,17 +32,39 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
   // --- ROTA KONTROL MANTIĞI ---
   const location = useLocation();
   const navigate = useNavigate();
-  
-  // Aktif sekmenin state'i. Başlangıç değeri URL'den alınır.
-  const [activeTab, setActiveTab] = useState(location.pathname.replace('/', '') || 'dashboard');
+  const { predictionId } = useParams<{ predictionId?: string }>();
 
-  // Kullanıcı bir sekmeye tıkladığında hem state'i hem de URL'i günceller.
-  const handleTabChange = (tabValue: string) => {
-    setActiveTab(tabValue);
-    navigate(`/${tabValue}`);
+  // Helper fonksiyonu, URL'den aktif sekmeyi belirler.
+  // Örn: /response/123 -> 'response'
+  // Örn: /alerts -> 'alerts'
+  const getActiveTabFromPathname = (pathname: string) => {
+    const firstSegment = pathname.split('/')[1];
+    const validTabs = ['dashboard', 'simulation', 'alerts', 'logs', 'response', 'users'];
+    if (validTabs.includes(firstSegment)) {
+        return firstSegment;
+    }
+    return 'dashboard'; // Varsayılan sekme
   };
-  // --- ROTA KONTROL SONU ---
+  
+  // Aktif sekmenin state'i
+  const [activeTab, setActiveTab] = useState(getActiveTabFromPathname(location.pathname));
 
+  // URL her değiştiğinde, aktif sekme state'ini de güncelle.
+  // Bu, tarayıcının ileri/geri butonlarıyla uyumluluğu sağlar.
+  useEffect(() => {
+    setActiveTab(getActiveTabFromPathname(location.pathname));
+  }, [location.pathname]);
+
+  // Kullanıcı bir sekmeye tıkladığında sadece URL'i değiştir.
+  // Yukarıdaki useEffect, state'i otomatik olarak güncelleyecektir.
+  const handleTabChange = (tabValue: string) => {
+    // Response sekmesine tıklanırsa, ID'siz ana yola git.
+    // Diğerleri kendi yollarına gider.
+    const path = tabValue === 'response' ? '/response' : `/${tabValue}`;
+    navigate(path);
+  };
+  
+  // --- Zamanlayıcı ve Hesaplamalar ---
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -70,7 +93,7 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
       </header>
 
       <main className="container mx-auto px-6 py-8">
-        {/* Kontrollü Tabs bileşeni */}
+        {/* Kontrollü Tabs bileşeni. Aktif sekme state'e bağlı. */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           
           <TabsList className="grid w-full grid-cols-6 bg-cyber-darker border border-cyber-light/30">
@@ -82,6 +105,7 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
             <TabsTrigger value="users" className="data-[state=active]:bg-cyber-primary data-[state=active]:text-cyber-dark"><Users className="w-4 h-4 mr-2" />Users</TabsTrigger>
           </TabsList>
           
+          {/* Diğer sekmelerin içerikleri */}
           <TabsContent value="dashboard" className="mt-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="glass-morphism"><CardHeader><CardTitle className="text-sm font-medium">Detected Attacks</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-cyber-accent">{isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : data.detected_attacks}</div></CardContent></Card>
@@ -92,8 +116,8 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <AttackTrendsChart />
               <DetectionMetricsChart />
-              <ModelPerformanceMatrix />
             </div>
+             <ModelPerformanceMatrix />
             <Card className="glass-morphism border-cyber-light/30">
               <CardHeader><CardTitle>Recent Security Alerts</CardTitle><CardDescription>Latest threat detections from AI model</CardDescription></CardHeader>
               <CardContent><AlertNotificationCenter /></CardContent>
@@ -103,7 +127,12 @@ const Index: React.FC<IndexPageProps> = ({ data, isLoading }) => {
           <TabsContent value="simulation"><AttackSimulationPanel /></TabsContent>
           <TabsContent value="alerts"><AlertNotificationCenter /></TabsContent>
           <TabsContent value="logs"><AttackLogVisualization /></TabsContent>
-          <TabsContent value="response"><ResponseCenter /></TabsContent>
+          
+          {/* --- ANA DEĞİŞİKLİK BURADA --- */}
+          <TabsContent value="response">
+              <ResponseCenter key={predictionId || 'empty'} />
+          </TabsContent>
+
           <TabsContent value="users"><UserManagement /></TabsContent>
         </Tabs>
       </main>
