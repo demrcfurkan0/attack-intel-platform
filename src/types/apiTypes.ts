@@ -1,4 +1,4 @@
-// src/types/apiTypes.ts
+// in: attack-intel-platform/src/types/apiTypes.ts
 
 export type HTTPMethod = "GET" | "POST";
 
@@ -36,6 +36,13 @@ export interface SQLInjectionRequestPayload {
   error_indicator_texts?: string[];
 }
 
+export interface SYNFloodRequestPayload {
+  target_ip: string;
+  target_port?: number;
+  num_packets?: number;
+  delay_seconds?: number;
+}
+
 // API Responses
 export interface SimulationStartResponse {
   status: string;
@@ -43,13 +50,11 @@ export interface SimulationStartResponse {
   params_received: any;
 }
 
-// --- DÜZELTME: İki ayrı log tipi için de paginated response tipleri ---
-
 // Simulation Log Tipi
 export interface SimulationLog {
   _id: string;
   simulation_id: string;
-  simulation_type: 'ddos' | 'brute_force' | 'sql_injection';
+  simulation_type: 'ddos' | 'brute_force' | 'sql_injection' | 'syn_flood';
   target_details: { url: string; method: string; ip?: string; };
   parameters_used: any;
   status: "completed" | "failed" | "running";
@@ -61,7 +66,6 @@ export interface SimulationLog {
   error_message?: string;
 }
 
-// Simulation Log'ları için Sayfalanmış Yanıt Tipi
 export interface PaginatedSimulationsResponse {
   total_count: number;
   data: SimulationLog[];
@@ -81,12 +85,11 @@ export interface PredictionLog {
   };
   is_attack: boolean;
   created_at: string;
-  simulation_id?: string; // Bu da opsiyonel olabilir
-  status?: string; // <-- HATA GİDEREN SATIR: Opsiyonel status alanı eklendi
+  simulation_id?: string;
+  status?: string;
+  tags?: string[];
 }
 
-
-// Prediction Log'ları için Sayfalanmış Yanıt Tipi
 export interface PaginatedPredictionsResponse {
   total_count: number;
   data: PredictionLog[];
@@ -106,13 +109,19 @@ export interface DetectionMetricsResponse {
   benign_traffic: number;
 }
 
+export interface ModelPerformanceResponse {
+  [trueLabel: string]: {
+    [predictedLabel: string]: number;
+  };
+}
+
+// User Management Tipleri
 export interface User {
-  id: string; // _id'ye karşılık gelir
+  id: string;
   username: string;
   email: string;
   role: string;
   status: 'active' | 'inactive';
-  lastLogin?: string; // Bu veri backend'den gelmiyor, şimdilik opsiyonel
 }
 
 export interface UserCreatePayload {
@@ -127,6 +136,7 @@ export interface UserUpdatePayload {
     status?: 'active' | 'inactive';
 }
 
+// Response & Chatbot Tipleri
 export interface ResponseAction {
   id: string;
   title: string;
@@ -141,22 +151,23 @@ export interface ResponseHistory {
   id: string;
   action_title: string;
   target: string;
-  attack_type?: string; // 👈 bunu ekle
+  attack_type?: string;
   executed_by: string;
   result_message: string;
   timestamp: string;
-  target_prediction_id: string; // 🔥 bunu ekleyin
+  target_prediction_id: string;
 }
 
-export interface SYNFloodRequestPayload {
-  target_ip: string;
-  target_port?: number;
-  num_packets?: number;
-  delay_seconds?: number;
-}
-
-export interface ModelPerformanceResponse {
-  [trueLabel: string]: {
-    [predictedLabel: string]: number;
-  };
+export interface ThreatIntelResponse {
+  ipAddress: string;
+  isPublic: boolean;
+  isWhitelisted?: boolean;
+  abuseConfidenceScore: number;
+  countryCode?: string;
+  isp?: string;
+  domain?: string;
+  totalReports: number;
+  lastReportedAt?: string;
+  error?: string;
+  message?: string;
 }

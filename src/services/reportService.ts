@@ -33,3 +33,7 @@ export const getPredictionLogById = (id: string) => {
 export const updatePredictionStatus = (id: string, status: string) => {
   return apiClient.patch(`/api/reports/predictions/${id}/status`, { status });
 }
+
+export const updatePredictionTags = (id: string, tags: string[]) => {
+  return apiClient.patch(`/api/reports/predictions/${id}/tags`, { tags });
+}

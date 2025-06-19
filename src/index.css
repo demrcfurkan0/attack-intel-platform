@@ -157,3 +157,9 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 255, 136, 0.5);
 }
+
+.chatbot-message-content {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+}

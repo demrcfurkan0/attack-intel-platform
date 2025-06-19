@@ -1,53 +1,34 @@
+# in: attack-intel-platform/app/routes.py
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Body
+import os
+from datetime import datetime, timedelta, timezone
+from ipaddress import ip_address
+from typing import Any, Dict, List, Optional
+
+import google.generativeai as genai
+import numpy as np
+import pandas as pd
+from bson import ObjectId
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
-from bson import ObjectId
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta, timezone
-from pydantic import BaseModel, Field, validator 
-from ipaddress import ip_address 
+from pydantic import BaseModel, validator
 
-from app.core.utils import serialize_mongo_doc, send_alert_email
 from app.core import state
 from app.core.config import Config
-from app.core.security import create_access_token, get_password_hash, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
-
+from app.core.security import (ACCESS_TOKEN_EXPIRE_MINUTES,
+                               create_access_token, get_password_hash,
+                               verify_password)
+from app.core.utils import send_alert_email, serialize_mongo_doc
+from app.database import db_manager, get_db_dependency, log_to_db
 from app.models import *
-from app.database import get_db_dependency, log_to_db, db_manager
-from app.simulations import *
 from app.services.simulation_handler import handle_simulation_and_log
-from pydantic import BaseModel
-
-from typing import List
-
-import pandas as pd
-import numpy as np
+from app.simulations import *
 
 
-router = APIRouter(prefix="/api")
-
-class UpdatePredictionStatus(BaseModel):
-    status: str
-
-
-def serialize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
-    if not doc: return {}
-    return {
-        "id": str(doc.get("_id", "")),
-        "username": doc.get("username", ""),
-        "email": doc.get("email", ""),
-        "role": doc.get("role", ""),
-        "status": doc.get("status", "inactive"),
-    }
-
-@router.get("/", tags=["General"])
-async def read_root():
-    return {"message": "API is running!"}
-
+# --- Pydantic Modelleri ---
 class BlockIPPayload(BaseModel):
     ip_address: str
-
     @validator('ip_address')
     def validate_ip(cls, v):
         try:
@@ -56,19 +37,43 @@ class BlockIPPayload(BaseModel):
         except ValueError:
             raise ValueError(f"{v} is not a valid IP address")
 
+class TagsPayload(BaseModel):
+    tags: List[str]
 
+class UpdatePredictionStatus(BaseModel):
+    status: str
+
+class ChatPromptPayload(BaseModel):
+    prompt: str
+    incident_details: Dict[str, Any]
+
+
+# --- Router Başlatma ---
+router = APIRouter(prefix="/api")
+
+
+# --- Yardımcı Fonksiyonlar ---
+def serialize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
+    if not doc: return {}
+    return { "id": str(doc.get("_id", "")), "username": doc.get("username", ""), "email": doc.get("email", ""), "role": doc.get("role", ""), "status": doc.get("status", "inactive") }
+
+
+# --- Genel Endpoint'ler ---
+@router.get("/", tags=["General"])
+async def read_root():
+    return {"message": "API is running!"}
+
+
+# --- AI Model Endpoint'i ---
 @router.post("/predict", response_model=PredictionOutput, tags=["AI Model"])
 async def predict_attack_endpoint(data: PredictionInput, background_tasks: BackgroundTasks, db_conn: any = Depends(get_db_dependency)):
     if state.model is None or state.scaler is None or not state.feature_columns:
         raise HTTPException(status_code=503, detail="AI Model, Scaler, or Feature Columns are not available.")
     
     input_df = pd.DataFrame([data.features])
-
     input_df = input_df.reindex(columns=state.feature_columns, fill_value=0.0)
-    
     scaled_features = state.scaler.transform(input_df)
     prediction_id = int(state.model.predict(scaled_features)[0])
-    
     probabilities = getattr(state.model, 'predict_proba', lambda _: [[]])(scaled_features)[0].tolist() or None
     label = Config.LABEL_MAP.get(prediction_id, "Unknown")
     is_attack = label != "BENIGN"
@@ -91,6 +96,7 @@ async def predict_attack_endpoint(data: PredictionInput, background_tasks: Backg
     
     return PredictionOutput(**output)
 
+
 # --- Simülasyonlar ---
 @router.post("/simulate/ddos", tags=["Simulations"])
 async def simulate_ddos_endpoint(params: DDoSParams, background_tasks: BackgroundTasks):
@@ -108,6 +114,7 @@ async def simulate_sqlinjection_endpoint(params: SQLInjectionParams, background_
 async def simulate_synflood_endpoint(params: SYNFloodParams, background_tasks: BackgroundTasks):
     return await handle_simulation_and_log("syn_flood", params, run_synflood_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(1, "DoS/DDoS"))
 
+
 # --- Raporlar ve İstatistikler ---
 @router.get("/reports/simulations", tags=["Reports"])
 async def get_simulation_reports(limit: int = 20, skip: int = 0, sim_type: Optional[str] = None, db_conn: any = Depends(get_db_dependency)):
@@ -115,9 +122,7 @@ async def get_simulation_reports(limit: int = 20, skip: int = 0, sim_type: Optio
         query = {}
         if sim_type and sim_type.strip(): query["simulation_type"] = sim_type.lower().strip()
         cursor = db_conn.simulations_log.find(query).sort("start_time", -1).skip(skip).limit(limit)
-        logs = [serialize_mongo_doc(doc) for doc in cursor]
-        total_count = db_conn.simulations_log.count_documents(query)
-        return {"total_count": total_count, "data": logs}
+        return {"total_count": db_conn.simulations_log.count_documents(query), "data": [serialize_mongo_doc(doc) for doc in cursor]}
     return await run_in_threadpool(db_task)
 
 @router.get("/reports/predictions", tags=["Reports"])
@@ -125,47 +130,32 @@ async def get_prediction_reports(limit: int = 10, skip: int = 0, db_conn: any = 
     def db_task():
         query = {"is_attack": True}
         cursor = db_conn.predictions_log.find(query).sort("created_at", -1).skip(skip).limit(limit)
-        logs = [serialize_mongo_doc(doc) for doc in cursor]
-        total_count = db_conn.predictions_log.count_documents(query)
-        return {"total_count": total_count, "data": logs}
+        return {"total_count": db_conn.predictions_log.count_documents(query), "data": [serialize_mongo_doc(doc) for doc in cursor]}
     return await run_in_threadpool(db_task)
 
 @router.get("/reports/predictions/{prediction_id}", tags=["Reports"])
 async def get_single_prediction_report(prediction_id: str, db_conn: any = Depends(get_db_dependency)):
-    """Belirtilen ID'ye sahip tek bir tahmin logunu getirir."""
-    if not ObjectId.is_valid(prediction_id):
-        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
-    
-    def db_task():
-        # Veriyi ObjectId olarak sorgula
-        return db_conn.predictions_log.find_one({"_id": ObjectId(prediction_id)})
-    
-    prediction_doc = await run_in_threadpool(db_task)
-    
-    if prediction_doc is None:
-        raise HTTPException(status_code=404, detail="Prediction log not found")
-        
+    if not ObjectId.is_valid(prediction_id): raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    prediction_doc = await run_in_threadpool(db_conn.predictions_log.find_one, {"_id": ObjectId(prediction_id)})
+    if prediction_doc is None: raise HTTPException(status_code=404, detail="Prediction log not found")
     return serialize_mongo_doc(prediction_doc)
 
 @router.patch("/reports/predictions/{prediction_id}/status", tags=["Reports"])
 async def update_prediction_status(prediction_id: str, payload: UpdatePredictionStatus, db_conn: any = Depends(get_db_dependency)):
-    """Bir tahmin logunun durumunu günceller (new, triaged, resolved etc.)."""
-    if not ObjectId.is_valid(prediction_id):
-        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
-    
-    def db_task():
-        result = db_conn.predictions_log.update_one(
-            {"_id": ObjectId(prediction_id)},
-            {"$set": {"status": payload.status, "last_updated": datetime.now(timezone.utc)}}
-        )
-        return result.matched_count
-
-    matched_count = await run_in_threadpool(db_task)
-    
-    if matched_count == 0:
-        raise HTTPException(status_code=404, detail="Prediction log not found to update")
-        
+    if not ObjectId.is_valid(prediction_id): raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    update_data = {"$set": {"status": payload.status, "last_updated": datetime.now(timezone.utc)}}
+    result = await run_in_threadpool(db_conn.predictions_log.update_one, {"_id": ObjectId(prediction_id)}, update_data)
+    if result.matched_count == 0: raise HTTPException(status_code=404, detail="Prediction log not found to update")
     return {"message": f"Status updated to '{payload.status}' successfully."}
+
+@router.patch("/reports/predictions/{prediction_id}/tags", tags=["Reports"])
+async def update_prediction_tags(prediction_id: str, payload: TagsPayload, db_conn: any = Depends(get_db_dependency)):
+    if not ObjectId.is_valid(prediction_id): raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    cleaned_tags = [tag.strip().lower() for tag in payload.tags if tag.strip()]
+    update_data = {"$set": {"tags": cleaned_tags, "last_updated": datetime.now(timezone.utc)}}
+    result = await run_in_threadpool(db_conn.predictions_log.update_one, {"_id": ObjectId(prediction_id)}, update_data)
+    if result.matched_count == 0: raise HTTPException(status_code=404, detail="Prediction log not found to update")
+    return {"message": "Tags updated successfully.", "tags": cleaned_tags}
 
 @router.get("/stats/attack_trends", tags=["Statistics"])
 async def get_attack_trends(db_conn: any = Depends(get_db_dependency)):
@@ -189,76 +179,24 @@ async def get_detection_metrics(db_conn: any = Depends(get_db_dependency)):
         results = list(db_conn.predictions_log.aggregate(pipeline))
         metrics = {"detected_attacks": 0, "benign_traffic": 0}
         for res in results:
-            if res.get('_id') is True:
-                metrics["detected_attacks"] = res.get('count', 0)
-            else:
-                metrics["benign_traffic"] = res.get('count', 0)
+            if res.get('_id') is True: metrics["detected_attacks"] = res.get('count', 0)
+            else: metrics["benign_traffic"] = res.get('count', 0)
         return metrics
     return await run_in_threadpool(db_task)
 
 @router.get("/stats/model-performance", tags=["Statistics"])
 async def get_model_performance(db_conn: any = Depends(get_db_dependency)):
-    """
-    Calculates a confusion matrix by comparing the ground truth from simulations
-    with the model's predictions.
-    """
-    
-    # Tüm etiketleri al (BENIGN dahil)
     all_labels = list(Config.LABEL_MAP.values())
-    
-    # Aggregation Pipeline
     pipeline = [
-        # 1. Adım: Sadece tamamlanmış ve `ground_truth_label`'i olan simülasyonları al
-        {
-            "$match": {
-                "status": "completed",
-                "ground_truth_label": {"$exists": True}
-            }
-        },
-        # 2. Adım: `predictions_log` koleksiyonu ile birleştir (SQL'deki LEFT JOIN gibi)
-        {
-            "$lookup": {
-                "from": "predictions_log",
-                "localField": "simulation_id",
-                "foreignField": "simulation_id",
-                "as": "predictions"
-            }
-        },
-        # 3. Adım: Birleştirilmiş diziyi aç (her tahmin için ayrı bir belge oluştur)
-        {
-            "$unwind": "$predictions"
-        },
-        # 4. Adım: Gerçek etiket ve tahmin edilen etikete göre grupla ve say
-        {
-            "$group": {
-                "_id": {
-                    "ground_truth": "$ground_truth_label",
-                    "predicted": "$predictions.prediction_result.prediction_label"
-                },
-                "count": {"$sum": 1}
-            }
-        },
-        # 5. Adım: Daha kolay işlemek için sonucu yeniden şekillendir
-        {
-            "$group": {
-                "_id": "$_id.ground_truth",
-                "predictions": {
-                    "$push": {
-                        "predicted_label": "$_id.predicted",
-                        "count": "$count"
-                    }
-                }
-            }
-        }
+        {"$match": {"status": "completed", "ground_truth_label": {"$exists": True}}},
+        {"$lookup": {"from": "predictions_log", "localField": "simulation_id", "foreignField": "simulation_id", "as": "predictions"}},
+        {"$unwind": "$predictions"},
+        {"$group": {"_id": {"ground_truth": "$ground_truth_label", "predicted": "$predictions.prediction_result.prediction_label"}, "count": {"$sum": 1}}},
+        {"$group": {"_id": "$_id.ground_truth", "predictions": {"$push": {"predicted_label": "$_id.predicted", "count": "$count"}}}}
     ]
-
     def db_task():
-        # Başlangıçta boş bir matris oluştur
         confusion_matrix = {true_label: {pred_label: 0 for pred_label in all_labels} for true_label in all_labels}
-
         results = list(db_conn.simulations_log.aggregate(pipeline))
-
-        # Veritabanından gelen sonuçlarla matrisi doldur
         for result in results:
             true_label = result["_id"]
             if true_label in confusion_matrix:
@@ -266,160 +204,118 @@ async def get_model_performance(db_conn: any = Depends(get_db_dependency)):
                     predicted_label = pred["predicted_label"]
                     if predicted_label in confusion_matrix[true_label]:
                         confusion_matrix[true_label][predicted_label] = pred["count"]
-        
         return confusion_matrix
-
     return await run_in_threadpool(db_task)
-
 
 # --- Authentication ---
 @router.post("/auth/token", tags=["Authentication"])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db_conn: any = Depends(get_db_dependency)):
-    def get_user_from_db():
-        return db_conn.users.find_one({"username": form_data.username})
-    user = await run_in_threadpool(get_user_from_db)
-    
+    user = await run_in_threadpool(db_conn.users.find_one, {"username": form_data.username})
     if not user or not verify_password(form_data.password, user.get("password", "")):
         raise HTTPException(status_code=401, detail="Incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
-    
     token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user["username"]}, expires_delta=token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/responses/history/{prediction_id}", response_model=List[ResponseHistory], tags=["Response"])
-async def get_incident_response_history(prediction_id: str, db_conn: any = Depends(get_db_dependency)):
-    """Belirli bir olayla (prediction_id) ilişkili tüm müdahale geçmişini getirir."""
-    if not ObjectId.is_valid(prediction_id):
-        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
-
-    def db_task():
-        # target_prediction_id alanına göre filtrele
-        cursor = db_conn.response_history.find(
-            {"target_prediction_id": ObjectId(prediction_id)}
-        ).sort("timestamp", 1) # Eskiden yeniye sırala
-        return [serialize_mongo_doc(doc) for doc in cursor]
-        
-    return await run_in_threadpool(db_task)
-
-# --- Kullanıcı Yönetimi (User Management) ---
+# --- User Management ---
 @router.post("/users", response_model=UserInDB, status_code=201, tags=["Users"])
 async def create_user(user: UserCreate, db_conn: any = Depends(get_db_dependency)):
     def db_task():
-        if db_conn.users.find_one({"$or": [{"username": user.username}, {"email": user.email}]}):
-            return {"error": "Username or email already exists"}
-        
+        if db_conn.users.find_one({"$or": [{"username": user.username}, {"email": user.email}]}): return {"error": "Username or email already exists"}
         user_dict = user.dict()
         user_dict["password"] = get_password_hash(user.password)
         result = db_conn.users.insert_one(user_dict)
         return db_conn.users.find_one({"_id": result.inserted_id})
-        
     new_user_doc = await run_in_threadpool(db_task)
-    if new_user_doc and "error" in new_user_doc:
-        raise HTTPException(status_code=409, detail=new_user_doc["error"])
+    if new_user_doc and "error" in new_user_doc: raise HTTPException(status_code=409, detail=new_user_doc["error"])
     return serialize_user(new_user_doc)
 
 @router.get("/users", response_model=List[UserInDB], tags=["Users"])
 async def get_users(db_conn: any = Depends(get_db_dependency)):
-    def db_task():
-        return [serialize_user(doc) for doc in db_conn.users.find()]
-    return await run_in_threadpool(db_task)
+    return [serialize_user(doc) for doc in await run_in_threadpool(list, db_conn.users.find())]
 
 @router.patch("/users/{user_id}", response_model=UserInDB, tags=["Users"])
 async def update_user(user_id: str, payload: UserUpdate, db_conn: any = Depends(get_db_dependency)):
-    if not ObjectId.is_valid(user_id):
-        raise HTTPException(status_code=400, detail="Invalid User ID format")
-    
+    if not ObjectId.is_valid(user_id): raise HTTPException(status_code=400, detail="Invalid User ID format")
     update_data = payload.dict(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No update data provided")
-
-    def db_task():
-        result = db_conn.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
-        if result.matched_count == 0:
-            return None
-        return db_conn.users.find_one({"_id": ObjectId(user_id)})
-
-    updated_user_doc = await run_in_threadpool(db_task)
-    if updated_user_doc is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not update_data: raise HTTPException(status_code=400, detail="No update data provided")
+    result = await run_in_threadpool(db_conn.users.update_one, {"_id": ObjectId(user_id)}, {"$set": update_data})
+    if result.matched_count == 0: raise HTTPException(status_code=404, detail="User not found")
+    updated_user_doc = await run_in_threadpool(db_conn.users.find_one, {"_id": ObjectId(user_id)})
     return serialize_user(updated_user_doc)
 
 @router.delete("/users/{user_id}", status_code=204, tags=["Users"])
 async def delete_user(user_id: str, db_conn: any = Depends(get_db_dependency)):
-    if not ObjectId.is_valid(user_id):
-        raise HTTPException(status_code=400, detail="Invalid User ID format")
-    
-    def db_task():
-        return db_conn.users.delete_one({"_id": ObjectId(user_id)}).deleted_count
-    if await run_in_threadpool(db_task) == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    if not ObjectId.is_valid(user_id): raise HTTPException(status_code=400, detail="Invalid User ID format")
+    result = await run_in_threadpool(db_conn.users.delete_one, {"_id": ObjectId(user_id)})
+    if result.deleted_count == 0: raise HTTPException(status_code=404, detail="User not found")
+    return
 
 # --- Response Actions ---
 @router.post("/responses/block-ip", status_code=201, tags=["Response"])
-async def block_ip_address(
-    payload: BlockIPPayload,
-    db_conn: any = Depends(get_db_dependency)
-):
+async def block_ip_address(payload: BlockIPPayload, db_conn: any = Depends(get_db_dependency)):
     ip_to_block = payload.ip_address
-    
-    block_record = {
-        "ip_address": ip_to_block,
-        "blocked_at": datetime.now(timezone.utc),
-        "reason": "Blocked in response to a detected threat."
-    }
-    
-    def db_task():
-        result = db_conn.blocked_ips.update_one(
-            {"ip_address": ip_to_block},
-            {"$set": block_record},
-            upsert=True
-        )
-        return result.upserted_id is not None or result.matched_count > 0
-
-    success = await run_in_threadpool(db_task)
-
-    if success:
+    block_record = { "ip_address": ip_to_block, "blocked_at": datetime.now(timezone.utc), "reason": "Blocked in response to a detected threat." }
+    result = await run_in_threadpool(db_conn.blocked_ips.update_one, {"ip_address": ip_to_block}, {"$set": block_record}, upsert=True)
+    if result.upserted_id is not None or result.matched_count > 0:
         return {"message": f"IP address {ip_to_block} has been successfully added to the blocklist."}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to update blocklist.")
+    raise HTTPException(status_code=500, detail="Failed to update blocklist.")
 
 @router.get("/responses/actions", response_model=List[ResponseAction], tags=["Response"])
 async def get_recommended_actions(db_conn: any = Depends(get_db_dependency)):
-    def db_task():
-        return list(db_conn.response_actions.find())
-    return await run_in_threadpool(db_task)
+    return await run_in_threadpool(list, db_conn.response_actions.find())
 
 @router.post("/responses/execute", response_model=ResponseHistory, status_code=201, tags=["Response"])
-async def execute_response_action(
-    action_title: str = Body(...), 
-    target_prediction_id: str = Body(...),
-    executed_by: str = Body(default="analyst"),
-    db_conn: any = Depends(get_db_dependency)
-):
-    if not ObjectId.is_valid(target_prediction_id):
-        raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
-
-    new_history_entry = {        
-        "action_title": action_title,
-        "attack_type": action_title.lower().replace(" ", "_"),
-        "target": f"Prediction ID: {target_prediction_id}",
-        "target_prediction_id": ObjectId(target_prediction_id),
-        "status": "completed",
-        "executed_by": executed_by,
-        "result_message": f"Action '{action_title}' was logged as executed successfully.",
-        "timestamp": datetime.now(timezone.utc)
-    }
-
-    def db_task():
-        result = db_conn.response_history.insert_one(new_history_entry)
-        return db_conn.response_history.find_one({"_id": result.inserted_id})
-    inserted_doc = await run_in_threadpool(db_task)
+async def execute_response_action(action_title: str = Body(...), target_prediction_id: str = Body(...), executed_by: str = Body(default="analyst"), db_conn: any = Depends(get_db_dependency)):
+    if not ObjectId.is_valid(target_prediction_id): raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    new_history_entry = { "action_title": action_title, "target": f"Prediction ID: {target_prediction_id}", "target_prediction_id": ObjectId(target_prediction_id), "status": "completed", "executed_by": executed_by, "result_message": f"Action '{action_title}' was logged.", "timestamp": datetime.now(timezone.utc) }
+    result = await run_in_threadpool(db_conn.response_history.insert_one, new_history_entry)
+    inserted_doc = await run_in_threadpool(db_conn.response_history.find_one, {"_id": result.inserted_id})
     return serialize_mongo_doc(inserted_doc)
 
 @router.get("/responses/history", response_model=List[ResponseHistory], tags=["Response"])
 async def get_response_history(limit: int = 10, db_conn: any = Depends(get_db_dependency)):
-    def db_task():
-        cursor = db_conn.response_history.find().sort("timestamp", -1).limit(limit)
-        return [serialize_mongo_doc(doc) for doc in cursor]
-    return await run_in_threadpool(db_task)
+    cursor = await run_in_threadpool(db_conn.response_history.find().sort, "timestamp", -1)
+    return [serialize_mongo_doc(doc) for doc in cursor.limit(limit)]
+
+@router.get("/responses/history/{prediction_id}", response_model=List[ResponseHistory], tags=["Response"])
+async def get_incident_response_history(prediction_id: str, db_conn: any = Depends(get_db_dependency)):
+    if not ObjectId.is_valid(prediction_id): raise HTTPException(status_code=400, detail="Invalid Prediction ID format")
+    cursor = await run_in_threadpool(db_conn.response_history.find({"target_prediction_id": ObjectId(prediction_id)}).sort, "timestamp", 1)
+    return [serialize_mongo_doc(doc) for doc in cursor]
+
+# --- CHATBOT ---
+@router.post("/chatbot/query", tags=["Chatbot"])
+async def handle_chatbot_query(payload: ChatPromptPayload):
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Google API key is not configured on the server.")
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+        
+        full_prompt = f"""
+        **Role and Goal:** You are 'CyberShield Co-Pilot', a helpful AI assistant for Security Operations Center (SOC) analysts. Your role is to analyze the provided incident data and give clear, concise, and actionable advice.
+        **Instructions:**
+        1. Base your answers ONLY on the provided incident data. Do not invent information.
+        2. Provide your response in clear, easy-to-understand language.
+        3. Use markdown for formatting, especially for lists.
+        ---
+        **Security Incident Data:**
+        ```json
+        {payload.incident_details}
+        ```
+        **User's Question:**
+        {payload.prompt}
+        """
+        
+        response = await model.generate_content_async(full_prompt)
+        return {"response": response.text}
+
+    except Exception as e:
+        print(f"Error communicating with Google AI: {e}")
+        error_message = "Could not get a response from the AI assistant."
+        if "API key not valid" in str(e):
+            error_message = "The configured Google API key is not valid."
+        raise HTTPException(status_code=503, detail=error_message)
