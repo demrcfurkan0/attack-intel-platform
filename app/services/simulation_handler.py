@@ -10,29 +10,27 @@ from bson import ObjectId
 import asyncio
 from pymongo.collection import Collection
 
-# get_mongo_client import'u artık kullanılmıyor, kaldırabiliriz.
-
 async def handle_simulation_and_log(
     sim_type: str,
     params: Any, 
     simulation_function: Callable,
     background_tasks: BackgroundTasks,
-    ground_truth_label: str  # Yeni parametre
+    ground_truth_label: str  
 ):
     start_time = datetime.now(timezone.utc)
     simulation_run_id = str(ObjectId())
+    # Prepare parameters for logging
     params_for_mongo = serialize_pydantic_for_mongo(params)
     target_ip = getattr(params, 'target_ip', 'N/A')
-    # Diğer parametreler aynı kalıyor
     target_url_str = str(getattr(params, 'target_url', 'N/A'))
     target_method_value = "N/A"
     if hasattr(params, 'method') and isinstance(params.method, Enum): 
         target_method_value = params.method.value
-
+    # Create the initial log document.
     initial_log_data = {
         "simulation_id": simulation_run_id,
         "simulation_type": sim_type,
-        "ground_truth_label": ground_truth_label,  # Yeni alan eklendi
+        "ground_truth_label": ground_truth_label,  
         "target_details": {
             "url": target_url_str,
             "method": target_method_value,
@@ -50,12 +48,12 @@ async def handle_simulation_and_log(
     if db_conn is not None:
         sim_collection = db_conn.simulations_log
         try:
-            # `to_thread` kullanmak daha güvenli
+
             await asyncio.to_thread(sim_collection.insert_one, initial_log_data)
-            print(f"📥 Inserting initial simulation log for {simulation_run_id}...")
+            print(f"Inserting initial simulation log for {simulation_run_id}...")
         except Exception as e:
-            print(f"❌ Error writing initial log: {e}")
-            sim_collection = None
+            print(f" Error writing initial log: {e}")
+            sim_collection = None # Prevent further DB operations
 
     async def progress_callback(data: dict):
         await ws_manager.send_json_update(simulation_run_id, data)
@@ -63,15 +61,11 @@ async def handle_simulation_and_log(
     async def simulation_task():
         try:
             print(f"{sim_type.upper()} simulation ({simulation_run_id}) starting in background...")
-            sim_result_details = await simulation_function(params, progress_callback, simulation_run_id)
-
-            # Bu bölüm artık trigger_prediction fonksiyonları içinde yapılıyor,
-            # burada tekrar loglamaya gerek yok. İsteğe bağlı olarak kaldırılabilir veya kalabilir.
-            # Şimdilik tutarlılık için kalabilir.
-            
+            # Execute the specific simulation function
+            sim_result_details = await simulation_function(params, progress_callback, simulation_run_id)            
             end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()
-
+            # If simulation completes update log
             if sim_collection is not None:
                 update_data = { "$set": { 
                     "status": "completed", 
@@ -82,11 +76,11 @@ async def handle_simulation_and_log(
                 await asyncio.to_thread(sim_collection.update_one, {"simulation_id": simulation_run_id}, update_data)
 
             await progress_callback({ "type": "completed", "message": "Simulation finished and logged." })
-            print(f"✅ {sim_type.upper()} simulation ({simulation_run_id}) completed and logged.")
+            print(f"{sim_type.upper()} simulation ({simulation_run_id}) completed and logged.")
 
         except Exception as e:
             end_time = datetime.now(timezone.utc)
-            print(f"❌ Error during {sim_type.upper()} simulation ({simulation_run_id}): {e}")
+            print(f" Error during {sim_type.upper()} simulation ({simulation_run_id}): {e}")
             print(traceback.format_exc())
 
             if sim_collection is not None:
@@ -96,6 +90,7 @@ async def handle_simulation_and_log(
             await progress_callback({ "type": "error", "message": str(e) })
 
     background_tasks.add_task(simulation_task)
+    # Immediately return a response
     return {
         "status": f"{sim_type.upper()} simulation started in background",
         "simulation_run_id": simulation_run_id

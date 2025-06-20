@@ -4,7 +4,6 @@ class HTTPMethod(str, Enum):
     GET = "GET"
     POST = "POST"
 
-# --- SQL Injection Payloads (Categorized) ---
 SQLI_PAYLOADS = {
     "error_based": [
         "'", "\"", "`", "\\", "';", "\";", "`sqlmap`",

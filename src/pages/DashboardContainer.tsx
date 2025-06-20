@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import IndexPage from './Index'; // Saf sunum bileşenimizi import ediyoruz
+import IndexPage from './Index'; 
 import { getAttackTrends, getDetectionMetrics } from '@/services/statisticsService';
 
 const DashboardContainer = () => {
@@ -42,7 +42,6 @@ const DashboardContainer = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Veriyi ve yüklenme durumunu IndexPage'e prop olarak geçiriyoruz
   return <IndexPage data={dashboardData} isLoading={isLoading} />;
 };
 

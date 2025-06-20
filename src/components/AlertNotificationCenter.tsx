@@ -1,22 +1,17 @@
-// in: attack-intel-platform/src/components/AlertNotificationCenter.tsx
-
 import React from 'react';
-import { Link } from 'react-router-dom'; // --- HATA 1: Bu import eksikti ---
+import { Link } from 'react-router-dom'; 
 import { useQuery } from '@tanstack/react-query';
 
-// UI Bileşenleri
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, Bell, Loader2, ChevronsRight } from 'lucide-react'; // --- HATA 2: ChevronsRight eksikti, Ban kaldırıldı ---
+import { AlertTriangle, Bell, Loader2, ChevronsRight } from 'lucide-react'; 
 
-// Servisler ve Tipler
 import { getPredictionLogs } from '@/services/reportService';
-import { PredictionLog } from '@/types/apiTypes'; // Tipin kendisini import etmek daha temiz
+import { PredictionLog } from '@/types/apiTypes'; 
 
 const AlertNotificationCenter = () => {
-  // queryKey'i bir dizi olarak tanımlamak best practice'dir.
   const { data: alertsResponse, isLoading, isError } = useQuery<{ data: { data: PredictionLog[] } }>({
     queryKey: ['predictionLogs'],
     queryFn: () => getPredictionLogs({ limit: 10 }),
@@ -25,12 +20,9 @@ const AlertNotificationCenter = () => {
 
   const alerts = alertsResponse?.data.data || [];
 
-  // --- HATA 3: blockIpMutation ve extractIpFromSource fonksiyonları artık burada gerekli değil ---
-  // Bu mantık ResponseCenter.tsx'e taşındığı için buradan kaldırıldı.
-
   const severityMap: { [key: string]: { label: string; color: string } } = {
     'DoS/DDoS': { label: 'Critical', color: 'bg-cyber-accent' },
-    'SYN Flood': { label: 'Critical', color: 'bg-cyber-accent' }, // SYN Flood için eklendi
+    'SYN Flood': { label: 'Critical', color: 'bg-cyber-accent' }, 
     'BruteForce': { label: 'High', color: 'bg-cyber-warning' },
     'SQL_Injection': { label: 'Critical', color: 'bg-cyber-accent' },
     default: { label: 'Medium', color: 'bg-cyber-secondary' },
@@ -62,7 +54,6 @@ const AlertNotificationCenter = () => {
 
       return (
         <Alert key={alert._id} className="border-cyber-light/30 bg-cyber-darker/50 flex flex-col space-y-2">
-          {/* Üst Kısım: Uyarı Başlığı ve Ciddiyet */}
           <div className="flex items-center space-x-3">
             <AlertTriangle className="h-4 w-4 text-cyber-accent" />
             <AlertTitle className="flex-grow font-medium text-gray-200">
@@ -71,7 +62,6 @@ const AlertNotificationCenter = () => {
             <Badge className={`${severity.color} text-white`}>{severity.label}</Badge>
           </div>
           
-          {/* Orta Kısım: Detaylar */}
           <AlertDescription className="text-gray-300 pl-7">
             Source: {alert.source_of_data}
           </AlertDescription>
@@ -79,10 +69,7 @@ const AlertNotificationCenter = () => {
             Detected at: {new Date(alert.created_at).toLocaleString()}
           </div>
           
-          {/* --- HATA 4: Bu bölüm tamamen yeniden düzenlendi --- */}
-          {/* Alt Kısım: Aksiyon Butonu */}
-          <div className="pl-7 pt-2 flex justify-end">
-             {/* asChild prop'u Button'un bir Link gibi davranmasını sağlar */}
+            <div className="pl-7 pt-2 flex justify-end">
              <Button asChild variant="secondary" size="sm">
                <Link to={`/response/${alert._id}`}>
                  Triage & Respond

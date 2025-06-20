@@ -66,7 +66,6 @@ const AttackSimulationPanel = () => {
         try {
             let response;
             
-            // Payload'u saldırı tipine göre doğru şekilde oluştur
             const commonParams = { ...params };
             const payload = attackType === 'syn_flood' 
                 ? { target_ip: target, ...commonParams }
@@ -144,7 +143,6 @@ const AttackSimulationPanel = () => {
                                 onValueChange={(value: AttackType) => {
                                     setAttackType(value); 
                                     setParams({});
-                                    // Saldırı türü değiştiğinde hedefi de mantıklı bir varsayılana ayarla
                                     if (value === 'syn_flood') {
                                         setTarget('127.0.0.1');
                                     } else {

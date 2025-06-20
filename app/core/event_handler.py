@@ -2,72 +2,63 @@ import os, json, joblib, traceback
 from app.database.database import db_manager
 from app.core.config import Config
 from app.core import state 
-# --- YENİ İMPORTLAR ---
 from .security import get_password_hash
 from dotenv import load_dotenv
 
-# .env dosyasındaki değişkenleri okumak için
 load_dotenv()
-# --- YENİ İMPORTLAR SONU ---
 
 async def create_initial_admin_user():
-    """
-    Veritabanını kontrol eder ve eğer hiç kullanıcı yoksa,
-    .env dosyasından alınan bilgilerle varsayılan bir admin kullanıcısı oluşturur.
-    """
-    print("İlk admin kullanıcısı kontrol ediliyor...")
+
+    print("First Admin User Check")
     db_conn = db_manager.get_db()
     if db_conn is None:
-        print("❌ Veritabanı bağlantısı yok, admin kullanıcısı oluşturulamadı.")
+        print("Database connection failed")
         return
-
-    # 'users' koleksiyonunda herhangi bir kullanıcı var mı diye bak
+    
+    # Create admin only if the 'users' collection is empty.
     if db_conn.users.count_documents({}) == 0:
-        print("ℹ️ Hiç kullanıcı bulunamadı. Varsayılan admin oluşturuluyor...")
+        print("No user found, creating default admin user")
         
-        # Admin bilgilerini .env dosyasından al (daha güvenli)
         admin_username = os.getenv("ADMIN_USERNAME", "admin")
         admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-        admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+        admin_password = os.getenv("ADMIN_PASSWORD", "admin123") 
         
         admin_user = {
             "username": admin_username,
             "email": admin_email,
-            "password": get_password_hash(admin_password), # Şifreyi hash'le
+            "password": get_password_hash(admin_password),  # Hash the password for security.
             "role": "Administrator",
             "status": "active"
         }
         
         try:
             db_conn.users.insert_one(admin_user)
-            print(f"✅ Varsayılan admin kullanıcısı '{admin_username}' başarıyla oluşturuldu.")
-            print(f"🔑 Şifre: {admin_password} (Lütfen ilk girişten sonra değiştirin)")
+            print(f"Default admin user '{admin_username}' created successfully.")
+            print(f"Password: {admin_password} (Please change it after first login)")
         except Exception as e:
-            print(f"❌ Varsayılan admin kullanıcısı oluşturulurken hata: {e}")
+            print(f"Error creating default admin user: {e}")
     else:
-        print("✅ Veritabanında zaten kullanıcı(lar) mevcut. Admin oluşturma atlandı.")
+        print("User already exists, skipping admin user creation.")
 
 
 async def startup_event():
-    print("Uygulama başlatılıyor...")
+    print("Starting the application...")
     db_manager.connect()
     
-    # --- YENİ ADIM: Admin kullanıcısını kontrol et/oluştur ---
     await create_initial_admin_user()
-    # --- YENİ ADIM SONU ---
-
-    # --- Model Yükleme Kısmı (Aynı kalıyor) ---
-    print("Model dosyaları yükleniyor...")
+    print("Loading AI Model, Scaler and Feature Columns...")
     try:
-        # ... (mevcut model yükleme kodunuz) ...
-        # ...
-        print("✅ AI Model, Scaler ve Özellik Sütunları başarıyla yüklendi.")
+        
+    # Note: Model loading logic is in main.py's startup event.
+    # This is a placeholder print statement.
+    
+        print("AI Model, Scaler and Feature Columns loaded successfully.")
     except Exception as e:
-        print(f"❌ AI Model yüklenirken hata: {e}")
+        print(f"Error loading AI Model, Scaler and Feature Columns: {e}")
 
-    print("Uygulama başlatma işlemleri tamamlandı.")
+    print("Application startup completed.")
 
 async def shutdown_event():
-    print("Uygulama kapatılıyor...")
+    print("Shutting down the application...")
     db_manager.close()
-    print("Uygulama kapatıldı.")
+    print("Application shutdown completed.")

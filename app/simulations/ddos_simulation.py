@@ -1,5 +1,3 @@
-# attack-simulation/app/simulations/ddos_simulation.py
-
 from app.simulations.simulation_params import DDoSParams
 from typing import List, Dict, Any, Callable, Coroutine
 import httpx
@@ -10,16 +8,12 @@ import os
 from app.core import state
 from app.services.simulation_handler import handle_simulation_and_log
 
-
-# --- YENİ BÖLÜM: AI MODELİNİ BESLEMEK İÇİN ---
-
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
 def generate_fake_ddos_features():
     if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}
     
-    # GERÇEK İstatistiklere dayalı, KONTROLLÜ veri üretimi
     features.update({
         'Flow_Duration':            max(0, random.uniform(4.09e+07 - 2e+07, 4.09e+07 + 2e+07)),
         'Total_Fwd_Packets':        max(0, random.uniform(5.83 - 2, 5.83 + 10)),
@@ -35,7 +29,6 @@ def generate_fake_ddos_features():
     return features
 
 async def trigger_prediction(simulation_id: str):
-    """AI modelinin tahmin endpoint'ini tetikler."""
     try:
         features = generate_fake_ddos_features()
         async with httpx.AsyncClient() as internal_client:
@@ -45,19 +38,18 @@ async def trigger_prediction(simulation_id: str):
                 json={
                     "features": features, 
                     "source_info": f"ddos_simulation_run_{simulation_id}",
-                    "simulation_id": simulation_id # <-- YENİ ALAN
+                    "simulation_id": simulation_id 
                 },
                 timeout=10.0
             )
     except Exception as e:
-        print(f"❌ Error during internal prediction call: {e}")
+        print(f"Error during internal prediction call: {e}")
 
-# --- ESKİ KODUN GÜNCELLENMİŞ HALİ ---
 
 async def run_ddos_simulation(
     params: DDoSParams, 
     progress_callback: Callable[[Dict[str, Any]], Coroutine[Any, Any, None]],
-    simulation_run_id: str # Hangi simülasyona ait olduğunu bilmek için ID'yi de alalım
+    simulation_run_id: str 
 ) -> Dict[str, Any]:
     print(f"Starting DDoS Simulation: Target={params.target_url}, Requests={params.num_requests}")
     successful_requests = 0
@@ -74,11 +66,12 @@ async def run_ddos_simulation(
 
         start_req_time = time.time()
         try:
+              # Send GET or POST request
             if params.method.value == "POST":
                 response = await session.post(str(params.target_url), json=params.payload, headers=params.headers, timeout=params.timeout_seconds)
             else:
                 response = await session.get(str(params.target_url), headers=params.headers, timeout=params.timeout_seconds)
-            
+            # Record statistics
             request_times.append(time.time() - start_req_time)
             status_code_str = str(response.status_code)
             status_codes_distribution[status_code_str] = status_codes_distribution.get(status_code_str, 0) + 1
@@ -90,13 +83,10 @@ async def run_ddos_simulation(
             failed_requests += 1
         finally:
             total_requests_made += 1
-            
-            # --- YENİ: Her istekten sonra hem ilerlemeyi bildir hem de AI tahminini tetikle ---
-            # 1. AI Tahminini tetikle (bunu beklemeden devam etmesi için bir görev olarak başlatabiliriz)
+            # After each request trigger a prediction to simulate detection
             asyncio.create_task(trigger_prediction(simulation_run_id))
             print(f"[TRIGGER] Sending fake features to prediction endpoint for sim_id: {simulation_run_id}")
             
-            # 2. WebSocket'e ilerleme bildir (her 50 istekte bir)
             if total_requests_made % 50 == 0 or total_requests_made == params.num_requests:
                 progress_data = {
                     "type": "progress",
@@ -112,16 +102,17 @@ async def run_ddos_simulation(
     async def worker(session: httpx.AsyncClient, req_id: int):
         async with semaphore:
             await send_single_request(session, req_id)
-
+    # Create and run all request tasks
     async with httpx.AsyncClient(verify=False) as client:
         tasks = [worker(client, i) for i in range(params.num_requests)]
         await asyncio.gather(*tasks)
 
     end_time_total = time.time()
+    # Calculate final performance
     total_duration_seconds = end_time_total - start_time_total
     requests_per_second = params.num_requests / total_duration_seconds if total_duration_seconds > 0 else 0
     avg_request_time_ms = (sum(request_times) / len(request_times) * 1000) if request_times else 0
-
+    # Compile the final result
     result = {
         "target_url": str(params.target_url),
         "method": params.method.value,

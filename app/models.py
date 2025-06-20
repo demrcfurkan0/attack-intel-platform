@@ -3,10 +3,12 @@ from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 
+# --- API Data Models ---
+
 class PredictionInput(BaseModel):
     features: Dict[str, float]
     source_info: Optional[str] = "manual_api_call"
-    simulation_id: Optional[str] = None # Bu alan zaten eklenmişti, doğru.
+    simulation_id: Optional[str] = None 
 
 class PredictionOutput(BaseModel):
     prediction_label: str
@@ -14,7 +16,6 @@ class PredictionOutput(BaseModel):
     probabilities: Optional[List[float]] = None
     processed_features_count: int
 
-# Diğer modeller aynı kalıyor...
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
@@ -24,7 +25,7 @@ class PyObjectId(ObjectId):
     def validate(cls, v):
         if not ObjectId.is_valid(v):
             raise ValueError("Invalid ObjectId")
-        return str(v)
+        return str(v) # Return as ObjectId
 
 class UserBase(BaseModel):
     username: str
@@ -45,6 +46,8 @@ class UserInDB(BaseModel):
     email: str
     role: str
     status: str
+    
+    # --- Response Action Models ---
     
 class ResponseAction(BaseModel):
     id: str = Field(..., alias="_id")

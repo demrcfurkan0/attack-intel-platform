@@ -1,5 +1,3 @@
-# attack-simulation/app/main.py
-
 import os
 import json
 import joblib
@@ -18,15 +16,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- Startup Event ---
 @app.on_event("startup")
 async def startup_event():
-    print("Uygulama başlatılıyor...")
+    print("Application starting...")
     db_manager.connect()
     
     await create_initial_admin_user()
 
-    print("Model dosyaları yükleniyor...")
+    print("Loading AI Model, Scaler and Feature Columns...")
     try:
         model_path = os.getenv("MODEL_PATH", "models/final_xgboost_model.pkl")
         scaler_path = os.getenv("SCALER_PATH", "models/final_scaler.pkl")
@@ -40,29 +37,25 @@ async def startup_event():
         with open(features_path, "r") as f:
             state.feature_columns = json.load(f)
 
-        print("✅ AI Model, Scaler ve Özellik Sütunları başarıyla yüklendi.")
+        print("AI Model, Scaler and Feature Columns loaded successfully.")
     except Exception as e:
-        print(f"❌ AI Model yüklenirken hata: {e}")
+        print(f"Error loading AI Model, Scaler and Feature Columns: {e}")
         print(traceback.format_exc())
 
-    print("Uygulama başlatma işlemleri tamamlandı.")
+    print("Application startup completed.")
 
-# --- Shutdown Event ---
 app.add_event_handler("shutdown", shutdown_event)
 
-# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # frontend'ten gelen her şeyi kabul eder
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Router ---
 app.include_router(api_router)
 
-# --- WebSocket ---
 @app.websocket("/ws/simulation/{simulation_id}")
 async def websocket_endpoint(websocket: WebSocket, simulation_id: str):
     await ws_manager.connect(websocket, simulation_id)

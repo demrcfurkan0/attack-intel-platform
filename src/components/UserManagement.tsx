@@ -25,7 +25,7 @@ const UserManagement = () => {
     setIsLoading(true);
     try {
       const response = await getUsers();
-      console.log("Fetched users:", response.data); // 👈 burayı ekle
+      console.log("Fetched users:", response.data); 
       setUsers(response.data || []);
     } catch (error) {
       toast({ variant: "destructive", title: "Failed to load users." });
@@ -70,7 +70,7 @@ const UserManagement = () => {
     try {
       await updateUser(userId, { status: newStatus });
   
-      // ✅ State'i doğrudan güncelle
+      
       setUsers(prev =>
         prev.map(user =>
           user.id === userId ? { ...user, status: newStatus } : user

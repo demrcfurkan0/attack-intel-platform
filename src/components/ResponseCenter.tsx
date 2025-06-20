@@ -1,11 +1,8 @@
-// in: attack-intel-platform/src/components/ResponseCenter.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 
-// UI Bileşenleri
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,14 +14,12 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, AlertCircle, ShieldCheck, History, Clock, Tag, FileText, X, ListTodo, Bot, Send } from 'lucide-react';
 
-// Yardımcılar ve Servisler
 import { useToast } from '@/hooks/use-toast';
 import { getPredictionLogById, updatePredictionStatus, updatePredictionTags } from '@/services/reportService';
 import { blockIpAddress, getIncidentHistory, executeAction } from '@/services/responseService';
 import { postChatQuery } from '@/services/chatbotService';
 import { PredictionLog, ResponseHistory } from '@/types/apiTypes';
 
-// --- PLAYBOOK YAPISI ---
 type PlaybookTask = { id: string; label: string; actionId?: 'block_ip' | 'isolate_app'; };
 type Playbook = { [attackType: string]: PlaybookTask[]; };
 const PLAYBOOKS: Playbook = {
@@ -39,10 +34,8 @@ const extractIpFromSource = (sourceInfo: string): string | null => {
     return match ? match[0] : null;
 };
 
-// --- CHATBOT ALT BİLEŞENİ ---
 type Message = { sender: 'user' | 'bot'; text: string; };
 interface ChatbotProps { incident: PredictionLog; }
-// --- CHATBOT ALT BİLEŞENİ ---
 const Chatbot: React.FC<ChatbotProps> = ({ incident }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -77,10 +70,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ incident }) => {
                 <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
                     {msg.sender === 'bot' && <div className="p-2 bg-cyber-primary rounded-full text-cyber-dark flex-shrink-0"><Bot size={16}/></div>}
                     <div className={`p-3 rounded-lg max-w-xs md:max-w-md ${msg.sender === 'bot' ? 'bg-cyber-darker' : 'bg-cyber-secondary'}`}>
-                        {/* 
-                          ReactMarkdown'ı, prose ve kelime kırma sınıflarını içeren bir div ile sarıyoruz.
-                          Bu, hem stilin tutarlı olmasını hem de taşmanın engellenmesini sağlar.
-                        */}
                         <div className="prose prose-sm prose-invert break-words">
                           <ReactMarkdown>{msg.text}</ReactMarkdown>
                         </div>
@@ -101,7 +90,6 @@ const Chatbot: React.FC<ChatbotProps> = ({ incident }) => {
 
   
 
-// --- ANA BİLEŞEN ---
 const ResponseCenter = () => {
     const { predictionId } = useParams<{ predictionId: string }>();
     const queryClient = useQueryClient();

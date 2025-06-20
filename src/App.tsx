@@ -20,12 +20,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Login sayfası her zaman erişilebilir */}
           <Route path="/login" element={<LoginPage />} />
           
-          {/* Korumalı Rota: Sadece giriş yapmış kullanıcılar bu yollara erişebilir */}
           <Route element={<PrivateRoute />}>
-            {/* DashboardContainer'ı gösteren tüm yolları buraya taşıdık */}
             <Route path="/" element={<DashboardContainer />} />
             <Route path="/dashboard" element={<DashboardContainer />} />
             <Route path="/simulation" element={<DashboardContainer />} />
@@ -36,7 +33,6 @@ const App = () => (
             <Route path="/users" element={<DashboardContainer />} />
           </Route>
           
-          {/* Diğer tüm yollar 404'e gider */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -1,8 +1,5 @@
-// in: attack-intel-platform/src/types/apiTypes.ts
-
 export type HTTPMethod = "GET" | "POST";
 
-// Request Payloads
 export interface DDoSRequestPayload {
   target_url: string;
   num_requests?: number;
@@ -50,7 +47,6 @@ export interface SimulationStartResponse {
   params_received: any;
 }
 
-// Simulation Log Tipi
 export interface SimulationLog {
   _id: string;
   simulation_id: string;
@@ -71,7 +67,6 @@ export interface PaginatedSimulationsResponse {
   data: SimulationLog[];
 }
 
-// Prediction Log Tipi
 export interface PredictionLog {
   _id: string;
   prediction_run_id: string;
@@ -95,7 +90,6 @@ export interface PaginatedPredictionsResponse {
   data: PredictionLog[];
 }
 
-// Statistics Endpoint Tipleri
 export interface AttackTrendsResponse {
   [hour: string]: {
     ddos?: number;
@@ -115,7 +109,6 @@ export interface ModelPerformanceResponse {
   };
 }
 
-// User Management Tipleri
 export interface User {
   id: string;
   username: string;
@@ -136,7 +129,6 @@ export interface UserUpdatePayload {
     status?: 'active' | 'inactive';
 }
 
-// Response & Chatbot Tipleri
 export interface ResponseAction {
   id: string;
   title: string;

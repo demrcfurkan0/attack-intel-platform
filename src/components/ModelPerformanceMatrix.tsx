@@ -5,19 +5,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, AlertCircle, Cpu } from 'lucide-react';
 import { getModelPerformance } from '@/services/statisticsService';
 
-// Hücreleri renklendirmek için bir yardımcı fonksiyon
 const getCellColor = (isDiagonal: boolean, value: number) => {
   if (isDiagonal) {
-    return value > 0 ? 'bg-green-500/20 text-green-300' : 'bg-transparent'; // Doğru tahminler
+    return value > 0 ? 'bg-green-500/20 text-green-300' : 'bg-transparent'; 
   }
-  return value > 0 ? 'bg-red-500/20 text-red-300' : 'bg-transparent'; // Yanlış tahminler
+  return value > 0 ? 'bg-red-500/20 text-red-300' : 'bg-transparent'; 
 };
 
 const ModelPerformanceMatrix = () => {
   const { data: response, isLoading, isError } = useQuery({
     queryKey: ['modelPerformance'],
     queryFn: getModelPerformance,
-    refetchInterval: 30000, // 30 saniyede bir yenile
+    refetchInterval: 30000, 
   });
 
   const matrixData = response?.data;

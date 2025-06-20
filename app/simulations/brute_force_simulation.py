@@ -17,7 +17,7 @@ def generate_fake_brute_force_features():
 
     fwd_packets = random.uniform(7, 12)
     bwd_packets = random.uniform(7, 12)
-
+  # Update features with values characteristic
     features.update({
         'Flow_Duration':            random.uniform(2e6, 9e6),       
         'Total_Fwd_Packets':        fwd_packets,                   
@@ -33,7 +33,6 @@ def generate_fake_brute_force_features():
     return features
 
 async def trigger_prediction(simulation_id: str):
-    """AI modelinin tahmin endpoint'ini tetikler."""
     try:
         features = generate_fake_brute_force_features()
         fake_source_ip = f"10.42.{random.randint(1, 254)}.{random.randint(1, 254)}"
@@ -49,7 +48,7 @@ async def trigger_prediction(simulation_id: str):
                 timeout=10.0
             )
     except Exception as e:
-        print(f"❌ Error during Brute Force prediction trigger: {e}")
+        print(f"Error during Brute Force prediction trigger: {e}")
 
 async def run_bruteforce_simulation(
     params: BruteForceParams, 
@@ -69,12 +68,14 @@ async def run_bruteforce_simulation(
         login_payload = {params.username_field: username, params.password_field: password}
         try:
             response = await session.post(str(params.target_url), data=login_payload, timeout=15.0, follow_redirects=True)
+            # Check for success
             success = (params.success_status_code and response.status_code == params.success_status_code) or \
                       (params.success_text_indicator and params.success_text_indicator.lower() in response.text.lower())
             
             if success:
                 credentials_found.append({"username": username, "password": password})
-                await progress_callback({"type": "progress", "message": f"✅ SUCCESS! Found credentials for {username}!"})
+                await progress_callback({"type": "progress", "message": f" SUCCESS! Found credentials for {username}!"})
+                  # Trigger a prediction
                 asyncio.create_task(trigger_prediction(simulation_run_id))
                 return True
         except httpx.RequestError as e:
@@ -98,10 +99,11 @@ async def run_bruteforce_simulation(
             if simulation_halted: break
             tasks = [worker(client, username, pwd) for pwd in params.passwords]
             results = await asyncio.gather(*tasks, return_exceptions=True)
+              # Stop if success
             if any(isinstance(res, bool) and res for res in results) and params.stop_on_first_success:
                 simulation_halted = True
                 break
-
+    # Prepare the final summary
     result = {
         "target_url": str(params.target_url), "total_attempts_made": total_attempts_made,
         "credentials_found": credentials_found, "simulation_halted_early": simulation_halted

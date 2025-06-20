@@ -1,5 +1,3 @@
-# in: attack-intel-platform/app/routes.py
-
 import os
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
@@ -25,8 +23,8 @@ from app.models import *
 from app.services.simulation_handler import handle_simulation_and_log
 from app.simulations import *
 
+# --- Pydantic Models for Request Validation ---
 
-# --- Pydantic Modelleri ---
 class BlockIPPayload(BaseModel):
     ip_address: str
     @validator('ip_address')
@@ -46,30 +44,30 @@ class UpdatePredictionStatus(BaseModel):
 class ChatPromptPayload(BaseModel):
     prompt: str
     incident_details: Dict[str, Any]
+    
+# --- API Router Initialization ---
 
-
-# --- Router Başlatma ---
 router = APIRouter(prefix="/api")
 
+# --- Helper Functions ---
 
-# --- Yardımcı Fonksiyonlar ---
 def serialize_user(doc: Dict[str, Any]) -> Dict[str, Any]:
     if not doc: return {}
     return { "id": str(doc.get("_id", "")), "username": doc.get("username", ""), "email": doc.get("email", ""), "role": doc.get("role", ""), "status": doc.get("status", "inactive") }
 
+# --- General Endpoints ---
 
-# --- Genel Endpoint'ler ---
 @router.get("/", tags=["General"])
 async def read_root():
     return {"message": "API is running!"}
 
+# --- AI Model Endpoints ---
 
-# --- AI Model Endpoint'i ---
 @router.post("/predict", response_model=PredictionOutput, tags=["AI Model"])
 async def predict_attack_endpoint(data: PredictionInput, background_tasks: BackgroundTasks, db_conn: any = Depends(get_db_dependency)):
     if state.model is None or state.scaler is None or not state.feature_columns:
         raise HTTPException(status_code=503, detail="AI Model, Scaler, or Feature Columns are not available.")
-    
+    # Preprocess features and make a prediction
     input_df = pd.DataFrame([data.features])
     input_df = input_df.reindex(columns=state.feature_columns, fill_value=0.0)
     scaled_features = state.scaler.transform(input_df)
@@ -77,14 +75,18 @@ async def predict_attack_endpoint(data: PredictionInput, background_tasks: Backg
     probabilities = getattr(state.model, 'predict_proba', lambda _: [[]])(scaled_features)[0].tolist() or None
     label = Config.LABEL_MAP.get(prediction_id, "Unknown")
     is_attack = label != "BENIGN"
-
+    
+    # Send an email alert if an attack is detected
+    
     if is_attack:
-        subject = f"🚨 SECURITY ALERT: {label} Attack Detected!"
+        subject = f"SECURITY ALERT: {label} Attack Detected!"
         body = f"A potential security threat has been detected.\n\nType: {label}\nSource: {data.source_info}\nTimestamp: {datetime.now(timezone.utc).isoformat()}"
         background_tasks.add_task(send_alert_email, subject, body)
 
     output = {"prediction_label": label, "prediction_id": prediction_id, "probabilities": probabilities, "processed_features_count": len(input_df.columns)}
     
+      # Log the prediction to the database
+      
     log_data = {
         "prediction_run_id": str(ObjectId()),
         "source_of_data": data.source_info,
@@ -96,8 +98,8 @@ async def predict_attack_endpoint(data: PredictionInput, background_tasks: Backg
     
     return PredictionOutput(**output)
 
+# --- Simulation Endpoints ---
 
-# --- Simülasyonlar ---
 @router.post("/simulate/ddos", tags=["Simulations"])
 async def simulate_ddos_endpoint(params: DDoSParams, background_tasks: BackgroundTasks):
     return await handle_simulation_and_log("ddos", params, run_ddos_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(1, "DoS/DDoS"))
@@ -114,8 +116,8 @@ async def simulate_sqlinjection_endpoint(params: SQLInjectionParams, background_
 async def simulate_synflood_endpoint(params: SYNFloodParams, background_tasks: BackgroundTasks):
     return await handle_simulation_and_log("syn_flood", params, run_synflood_simulation, background_tasks, ground_truth_label=Config.LABEL_MAP.get(1, "DoS/DDoS"))
 
+# --- Reporting and Statistics Endpoints ---
 
-# --- Raporlar ve İstatistikler ---
 @router.get("/reports/simulations", tags=["Reports"])
 async def get_simulation_reports(limit: int = 20, skip: int = 0, sim_type: Optional[str] = None, db_conn: any = Depends(get_db_dependency)):
     def db_task():
@@ -228,6 +230,7 @@ async def create_user(user: UserCreate, db_conn: any = Depends(get_db_dependency
         return db_conn.users.find_one({"_id": result.inserted_id})
     new_user_doc = await run_in_threadpool(db_task)
     if new_user_doc and "error" in new_user_doc: raise HTTPException(status_code=409, detail=new_user_doc["error"])
+    
     return serialize_user(new_user_doc)
 
 @router.get("/users", response_model=List[UserInDB], tags=["Users"])

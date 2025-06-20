@@ -21,7 +21,6 @@ export const useSimulationSocket = (simulationId: string | null) => {
       return;
     }
 
-    // Yeni bir simülasyon başladığında durumu sıfırla
     setIsFinished(false);
     setProgress(0);
     setStatusMessage('Connecting to real-time feed...');
@@ -49,7 +48,7 @@ export const useSimulationSocket = (simulationId: string | null) => {
 
         if (data.type === 'completed' || data.type === 'error' || data.type === 'final_summary') {
           setProgress(100);
-          setIsFinished(true); // Simülasyonun bittiğini işaretle
+          setIsFinished(true); 
           if (data.type === 'error') {
             toast({
               variant: 'destructive',
@@ -66,7 +65,6 @@ export const useSimulationSocket = (simulationId: string | null) => {
     socket.onclose = () => {
       console.log(`WebSocket disconnected for simulation: ${simulationId}`);
       setIsConnected(false);
-      // Sadece simülasyon bittiğinde toast göster, ani kopmalarda değil
       if(isFinished) {
           toast({
             title: "Simulation Finished",
@@ -85,14 +83,13 @@ export const useSimulationSocket = (simulationId: string | null) => {
       setIsConnected(false);
     };
 
-    // Component unmount olduğunda veya simulationId değiştiğinde socket'i kapat
     return () => {
       if (socket.readyState === WebSocket.OPEN) {
         socket.close();
       }
       webSocketRef.current = null;
     };
-  }, [simulationId, toast, isFinished]); // isFinished'ı dependency array'e ekledik
+  }, [simulationId, toast, isFinished]); 
 
   return { statusMessage, progress, isConnected, isFinished };
 };

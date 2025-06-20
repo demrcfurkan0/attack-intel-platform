@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Shield, Loader2 } from 'lucide-react';
-import { login } from '@/services/authService'; // Yeni servisi import et
+import { login } from '@/services/authService'; 
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -19,13 +19,10 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
     try {
-      // Backend'e login isteği gönder
       const data = await login(username, password);
       
-      // Başarılı olursa, dönen token'ı tarayıcı hafızasına kaydet
       if (data.access_token) {
         localStorage.setItem('authToken', data.access_token);
-        // Dashboard'a yönlendir
         navigate('/dashboard', { replace: true });
       } else {
         throw new Error('No token received');

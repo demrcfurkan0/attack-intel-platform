@@ -1,8 +1,6 @@
 import apiClient from '../lib/apiClient';
 import { ResponseAction, ResponseHistory } from '../types/apiTypes';
 
-
-
 export const getRecommendedActions = () => {
   return apiClient.get<ResponseAction[]>('/api/responses/actions');
 };

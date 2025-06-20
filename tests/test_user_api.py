@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 from app.main import app
-from app.database import get_db_dependency # DİKKAT: .database uzantısı yok
+from app.database import get_db_dependency 
 
 MOCK_USERS_DB = [
     {
@@ -30,14 +30,10 @@ async def override_get_db_dependency():
                 return MOCK_USERS_DB
     return MockDb()
 
-# Override işlemini test fonksiyonundan önce yapıyoruz
 app.dependency_overrides[get_db_dependency] = override_get_db_dependency
 
 @pytest.mark.asyncio
 async def test_get_all_users():
-    """
-    /api/users endpoint'inin sahte kullanıcı listesini doğru döndürdüğünü test eder.
-    """
     async with AsyncClient(app=app, base_url="http://test") as ac:
         response = await ac.get("/api/users")
     
@@ -48,6 +44,5 @@ async def test_get_all_users():
     assert len(response_data) == 2
     assert response_data[0]["username"] == "testuser1"
 
-# Testler bittikten sonra override'ı temizlemek iyi bir pratiktir.
 def teardown_function():
     app.dependency_overrides = {}
