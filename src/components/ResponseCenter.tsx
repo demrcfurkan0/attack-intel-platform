@@ -42,76 +42,64 @@ const extractIpFromSource = (sourceInfo: string): string | null => {
 // --- CHATBOT ALT BİLEŞENİ ---
 type Message = { sender: 'user' | 'bot'; text: string; };
 interface ChatbotProps { incident: PredictionLog; }
+// --- CHATBOT ALT BİLEŞENİ ---
 const Chatbot: React.FC<ChatbotProps> = ({ incident }) => {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [input, setInput] = useState('');
-    const scrollAreaRef = useRef<HTMLDivElement>(null);
-  
-    const chatMutation = useMutation({
-      mutationFn: (prompt: string) => postChatQuery({ prompt, incident_details: incident }),
-      onSuccess: (data) => setMessages(prev => [...prev, { sender: 'bot', text: data.data.response }]),
-      onError: () => setMessages(prev => [...prev, { sender: 'bot', text: "Sorry, I couldn't get a response. Please try again." }])
-    });
-  
-    const handleSend = () => {
-      if (!input.trim()) return;
-      setMessages(prev => [...prev, { sender: 'user', text: input }]);
-      chatMutation.mutate(input);
-      setInput('');
-    };
-  
-    useEffect(() => {
-      if (scrollAreaRef.current) {
-          scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
-      }
-    }, [messages]);
-  
-    return (
-      <Card className="glass-morphism h-[500px] flex flex-col">
-        <CardHeader><CardTitle className="flex items-center"><Bot className="w-5 h-5 mr-2" /> CyberShield Co-Pilot</CardTitle></CardHeader>
-        <CardContent className="flex-grow flex flex-col p-0">
-          <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
-              <div className="space-y-4">
-              {messages.map((msg, index) => (
-                  <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
-                      {msg.sender === 'bot' && <div className="p-2 bg-cyber-primary rounded-full text-cyber-dark"><Bot size={16}/></div>}
-                      <div className={`p-3 rounded-lg max-w-xs md:max-w-md ${msg.sender === 'bot' ? 'bg-cyber-darker' : 'bg-cyber-secondary'}`}>
-                          {/* 
-                            ReactMarkdown'ı, index.css'e eklediğimiz özel sınıfa sahip bir div ile sarıyoruz.
-                            Bu, içindeki tüm metinlerin doğru şekilde alt satıra geçmesini sağlar.
-                          */}
-                          <div className="chatbot-message-content">
-                             <ReactMarkdown
-                                  components={{
-                                    // Başlıkları daha küçük ve bold paragraflara dönüştür
-                                    h1: ({node, ...props}) => <p className="font-bold mb-2 text-base" {...props} />,
-                                    h2: ({node, ...props}) => <p className="font-bold mb-2 text-base" {...props} />,
-                                    h3: ({node, ...props}) => <p className="font-bold mb-2" {...props} />,
-                                    // Listelerin boşluklarını ayarla
-                                    ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
-                                    ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2 space-y-1" {...props} />,
-                                    // Satır içi kod bloklarını stilize et
-                                    code: ({node, ...props}) => <code className="bg-black/20 px-1 py-0.5 rounded-sm text-xs" {...props} />,
-                                    p: ({node, ...props}) => <p className="text-sm text-white" {...props} />
-                                  }}
-                              >
-                                  {msg.text}
-                              </ReactMarkdown>
-                          </div>
-                      </div>
-                  </div>
-              ))}
-              {chatMutation.isPending && ( <div className="flex items-start gap-3"><div className="p-2 bg-cyber-primary rounded-full text-cyber-dark"><Loader2 size={16} className="animate-spin"/></div><div className="p-3 rounded-lg bg-cyber-darker">Thinking...</div></div> )}
-              </div>
-          </ScrollArea>
-          <div className="p-4 border-t border-cyber-light/20 flex items-center gap-2">
-              <Input placeholder="Ask about this incident..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())} disabled={chatMutation.isPending} />
-              <Button onClick={handleSend} disabled={chatMutation.isPending} size="icon"><Send size={16}/></Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const chatMutation = useMutation({
+    mutationFn: (prompt: string) => postChatQuery({ prompt, incident_details: incident }),
+    onSuccess: (data) => setMessages(prev => [...prev, { sender: 'bot', text: data.data.response }]),
+    onError: () => setMessages(prev => [...prev, { sender: 'bot', text: "Sorry, I couldn't get a response. Please try again." }])
+  });
+
+  const handleSend = () => {
+    if (!input.trim()) return;
+    setMessages(prev => [...prev, { sender: 'user', text: input }]);
+    chatMutation.mutate(input);
+    setInput('');
   };
+
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+        scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  return (
+    <Card className="glass-morphism h-[500px] flex flex-col">
+      <CardHeader><CardTitle className="flex items-center"><Bot className="w-5 h-5 mr-2" /> CyberShield Co-Pilot</CardTitle></CardHeader>
+      <CardContent className="flex-grow flex flex-col p-0">
+        <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
+            <div className="space-y-4">
+            {messages.map((msg, index) => (
+                <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
+                    {msg.sender === 'bot' && <div className="p-2 bg-cyber-primary rounded-full text-cyber-dark flex-shrink-0"><Bot size={16}/></div>}
+                    <div className={`p-3 rounded-lg max-w-xs md:max-w-md ${msg.sender === 'bot' ? 'bg-cyber-darker' : 'bg-cyber-secondary'}`}>
+                        {/* 
+                          ReactMarkdown'ı, prose ve kelime kırma sınıflarını içeren bir div ile sarıyoruz.
+                          Bu, hem stilin tutarlı olmasını hem de taşmanın engellenmesini sağlar.
+                        */}
+                        <div className="prose prose-sm prose-invert break-words">
+                          <ReactMarkdown>{msg.text}</ReactMarkdown>
+                        </div>
+                    </div>
+                </div>
+            ))}
+            {chatMutation.isPending && ( <div className="flex items-start gap-3"><div className="p-2 bg-cyber-primary rounded-full text-cyber-dark flex-shrink-0"><Loader2 size={16} className="animate-spin"/></div><div className="p-3 rounded-lg bg-cyber-darker">Thinking...</div></div> )}
+            </div>
+        </ScrollArea>
+        <div className="p-4 border-t border-cyber-light/20 flex items-center gap-2">
+            <Input placeholder="Ask about this incident..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())} disabled={chatMutation.isPending} />
+            <Button onClick={handleSend} disabled={chatMutation.isPending} size="icon"><Send size={16}/></Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+  
 
 // --- ANA BİLEŞEN ---
 const ResponseCenter = () => {

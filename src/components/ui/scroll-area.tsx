@@ -1,3 +1,5 @@
+// in: attack-intel-platform/src/components/ui/scrollarea.tsx
+
 import * as React from "react"
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
 
