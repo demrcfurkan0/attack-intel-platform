@@ -78,49 +78,50 @@ git clone https://github.com/demrcfurkan0/attack-intel-platform.git
 cd attack-intel-platform
 #.env Configration
 
-#Mongo Conf.
+# Mongo Conf.
 MONGO_URI=mongodb://mongo:27017/cyber_attack_sim_db
 DATABASE_NAME="cyber_attack_sim_db"
 
-#Path to Model
+# Path to Model
 MODEL_PATH="models/final_xgboost_model.pkl"
 SCALER_PATH="models/final_scaler.pkl"
 FEATURE_COLUMNS_PATH="models/feature_columns.json"
 
-#SecretKey
+# SecretKey
 SECRET_KEY = 7b33b4563809b3b4f942e64e9aae463bcc9ffc30808ffcd63604cbfa9bdce292
 
-#Gemini Apı Key
+# Gemini Apı Key
 GOOGLE_API_KEY = AIzaSyA0xYMBU55whDXjScFTckzpXSr1SIK-qnI
 
-#Email Notification Conf.
+# Email Notification Conf.
 SMTP_SERVER="smtp.gmail.com"
 SMTP_PORT=587
 EMAIL_SENDER="ydemirci376@gmail.com"
 EMAIL_PASSWORD="drsxuwooipcarsbk"
 EMAIL_RECIPIENT="yfurkandemirci@stu.aydin.edu.tr"
 
-#Api Conf.
+# Api Conf.
+
 INTERNAL_API_BASE_URL="http://fastapi:8000"
 VITE_API_BASE_URL="http://localhost:8000"
 
-#Base User Credentials.
+# Base User Credentials.
 ADMIN_USERNAME=admin
 ADMIN_EMAIL=admin@cybershield.com
 ADMIN_PASSWORD=admin
 
 
-#Run the App
+### 2. Run the App
 docker-compose up --build
 npm run dev
 
-#See at:
+# See at:
 
 * Frontend: http://localhost:8080
 * Backend: http://localhost:8000/docs
 * Mongo Express: http://localhost:8081
 
-## Use Platform:
+### 3. Use Platform:
 
 * Go to http://localhost:8080
 * Username: admin
