@@ -108,5 +108,5 @@ async def run_bruteforce_simulation(
         "target_url": str(params.target_url), "total_attempts_made": total_attempts_made,
         "credentials_found": credentials_found, "simulation_halted_early": simulation_halted
     }
-    await progress_callback({"type": "final_summary", "message": "🔒 Brute-force simulation completed."})
+    await progress_callback({"type": "final_summary", "message": " Brute-force simulation completed."})
     return result

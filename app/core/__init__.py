@@ -11,5 +11,5 @@ __all__ = [
     "model",
     "scaler",
     "feature_columns",
-    
+
 ]
