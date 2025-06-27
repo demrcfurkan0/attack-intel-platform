@@ -80,7 +80,7 @@ const AttackSimulationPanel = () => {
             }
             
             setActiveSimulationId(response.data.simulation_run_id);
-            toast({ title: "Simulation Initialized! 🚀", description: "Connecting to real-time feed..." });
+            toast({ title: "Simulation Initialized! ", description: "Connecting to real-time feed..." });
             
             setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ['recentSimulations'] });
