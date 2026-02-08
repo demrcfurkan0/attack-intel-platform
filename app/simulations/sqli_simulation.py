@@ -12,7 +12,7 @@ from app.simulations.utils import HTTPMethod, SQLI_PAYLOADS
 
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
 
-
+#problem solved
 def generate_fake_sqli_features():
     if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}

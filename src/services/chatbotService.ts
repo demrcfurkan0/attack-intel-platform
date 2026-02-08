@@ -10,7 +10,6 @@ interface ChatQueryResponse {
   response: string;
 }
 
-
 export const postChatQuery = (payload: ChatQueryPayload) => {
   return apiClient.post<ChatQueryResponse>('/api/chatbot/query', payload);
 };

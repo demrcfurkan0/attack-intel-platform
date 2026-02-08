@@ -9,7 +9,7 @@ import os
 import traceback 
 
 INTERNAL_API_BASE_URL = os.getenv("INTERNAL_API_BASE_URL", "http://localhost:8000")
-
+# syn synack ack
 def generate_fake_synflood_features():
     if not state.feature_columns: return {}
     features = {key: 0.0 for key in state.feature_columns}

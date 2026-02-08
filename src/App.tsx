@@ -9,8 +9,6 @@ import DashboardContainer from "./pages/DashboardContainer";
 import NotFound from "./pages/NotFound";
 import PrivateRoute from "./components/PrivateRoute"; 
 
-
-
 const queryClient = new QueryClient();
 
 const App = () => (

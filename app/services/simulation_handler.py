@@ -9,7 +9,7 @@ from app.core.ws_manager import manager as ws_manager
 from bson import ObjectId
 import asyncio
 from pymongo.collection import Collection
-
+ #handling has problems
 async def handle_simulation_and_log(
     sim_type: str,
     params: Any, 

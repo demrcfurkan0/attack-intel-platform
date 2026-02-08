@@ -41,6 +41,8 @@ const AlertNotificationCenter = () => {
       );
     }
 
+
+    
     if (isError) {
       return <Alert variant="destructive">Could not load alerts.</Alert>;
     }

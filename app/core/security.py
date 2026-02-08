@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Create a password context for hashing and verify
+# Create a password context for hashing and verify #
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

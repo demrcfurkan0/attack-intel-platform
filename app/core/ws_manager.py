@@ -1,7 +1,7 @@
 from fastapi import WebSocket
 from typing import Dict, List
 import json
-
+# websocket version error
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}

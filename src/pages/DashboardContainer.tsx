@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import IndexPage from './Index'; 
 import { getAttackTrends, getDetectionMetrics } from '@/services/statisticsService';
-
 const DashboardContainer = () => {
   const [dashboardData, setDashboardData] = useState({
     detected_attacks: 0,

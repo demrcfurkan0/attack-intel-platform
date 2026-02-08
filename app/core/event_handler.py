@@ -26,7 +26,7 @@ async def create_initial_admin_user():
         admin_user = {
             "username": admin_username,
             "email": admin_email,
-            "password": get_password_hash(admin_password),  # Hash the password for security.
+            "password": get_password_hash(admin_password),  # Hash the password for security and #.
             "role": "Administrator",
             "status": "active"
         }
@@ -49,8 +49,8 @@ async def startup_event():
     print("Loading AI Model, Scaler and Feature Columns...")
     try:
         
-    # Note: Model loading logic is in main.py's startup event.
-    # This is a placeholder print statement.
+    # Note: Model loading logic is in main.py's startup event# .
+    # This is a placeholder print statement ##.
     
         print("AI Model, Scaler and Feature Columns loaded successfully.")
     except Exception as e:

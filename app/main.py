@@ -9,7 +9,7 @@ from app.core.ws_manager import manager as ws_manager
 from app.database import db_manager
 from app.core import state
 from app.core.event_handler import create_initial_admin_user, shutdown_event
-
+ #main function corrected
 app = FastAPI(
     title="AI-Driven Cyber Attack Simulation and Response Tool",
     description="Cyber attack simulation, AI-based detection, and reporting.",

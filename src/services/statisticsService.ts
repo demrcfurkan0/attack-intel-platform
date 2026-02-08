@@ -8,7 +8,6 @@ export const getAttackTrends = () => {
 export const getDetectionMetrics = () => {
   return apiClient.get<DetectionMetricsResponse>('/api/stats/detection_metrics');
 };
-
 export const getModelPerformance = () => {
   return apiClient.get<ModelPerformanceResponse>('/api/stats/model-performance');
 };

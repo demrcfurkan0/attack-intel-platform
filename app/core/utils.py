@@ -26,7 +26,7 @@ def serialize_mongo_doc(doc: dict) -> dict:
     if "_id" in doc:
         doc["_id"] = str(doc["_id"])
     return doc
-
+# states has problem
 # Load email credentials and settings 
 def send_alert_email(subject: str, body: str):
     sender = os.getenv("EMAIL_SENDER")

@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
-# Load MongoDB 
+# Load MongoDB postgre?
 MONGO_URI = os.getenv("MONGO_URI")
 DATABASE_NAME = os.getenv("DATABASE_NAME")
 

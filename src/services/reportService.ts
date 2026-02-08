@@ -17,7 +17,6 @@ interface GetPredictionLogsParams {
   skip?: number;
 }
 
-
 export const getPredictionLogs = (params: GetPredictionLogsParams = {}) => {
   return apiClient.get<PaginatedPredictionsResponse>('/api/reports/predictions', { params });
 };

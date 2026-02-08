@@ -11,7 +11,6 @@ import { getSimulationLogs } from '../services/reportService';
 import { SimulationLog } from '../types/apiTypes';
 
 const LOGS_PER_PAGE = 10;
-
 const AttackLogVisualization = () => {
   const [currentPage, setCurrentPage] = useState(1);
 

@@ -11,7 +11,6 @@ const getCellColor = (isDiagonal: boolean, value: number) => {
   }
   return value > 0 ? 'bg-red-500/20 text-red-300' : 'bg-transparent'; 
 };
-
 const ModelPerformanceMatrix = () => {
   const { data: response, isLoading, isError } = useQuery({
     queryKey: ['modelPerformance'],

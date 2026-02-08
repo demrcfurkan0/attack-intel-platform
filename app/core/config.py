@@ -15,5 +15,6 @@ class Config:
     1: "DoS/DDoS",
     2: "BruteForce",
     3: "SQL_Injection"
+    
 }
 

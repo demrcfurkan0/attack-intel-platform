@@ -11,7 +11,6 @@ const AttackTrendsChart = () => {
     refetchInterval: 30000,
     staleTime: 15000,
   });
-
   const formattedData = data?.data
     ? Object.entries(data.data).map(([time, values]) => ({
         time,

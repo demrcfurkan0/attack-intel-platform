@@ -69,7 +69,7 @@ Users can launch four different types of cyber-attack simulations:
 
 ## Getting Started
 
-> Requires: Docker & Docker Compose installed on your system
+> Requires: Docker & Docker Compose installed on your system, Also open the Docker app while running the project
 
 ### 1. Clone the Repository
 
